@@ -39,7 +39,7 @@ class monotoneTuner :
         df_result.index.name = self.var
         return df_result
 
-    def mergebins(self, input_df, curtId, nextId) :
+    def _mergebins(self, input_df, curtId, nextId) :
         df = input_df.copy()
         newEnd = df.loc[df['id'] == nextId, 'start'].values
         new0 = np.sum(df.loc[df['id'].isin([curtId, nextId]), f"{self.response}_0"].values)
@@ -87,13 +87,13 @@ class monotoneTuner :
                             nextMetric = df.loc[df['id'] == nextId, monoTarget].values
                             if sign == "+" :
                                 if nextMetric <= curtMetric :
-                                    df, sumDel = self.mergebins(input_df = df, curtId = curtId, nextId = nextId) 
+                                    df, sumDel = self._mergebins(input_df = df, curtId = curtId, nextId = nextId) 
                                     break
                                 else :
                                     sumDel = 0
                             else :
                                 if nextMetric >= curtMetric :
-                                    df, sumDel = self.mergebins(input_df = df, curtId = curtId, nextId = nextId)
+                                    df, sumDel = self._mergebins(input_df = df, curtId = curtId, nextId = nextId)
                                     break
                                 else :
                                     sumDel = 0
