@@ -16,6 +16,7 @@ class monotoneTuner :
             self.responseType = "cat"
         else :
             self.responseType = "num"
+        
         self.data = data
         self.var = var
         self.response = response
@@ -26,6 +27,7 @@ class monotoneTuner :
             sign = "+"
         else :
             sign = "-"
+        
         return sign
     
     def _initMonoTable(self, *args) :
@@ -37,6 +39,7 @@ class monotoneTuner :
         df_result = df1.rename(columns = {self.var : "start", "count" : "total", "sum" : f"{self.response}_1"})
         df_result[f"{self.response}_0"] = df_result["total"] - df_result[f"{self.response}_1"]
         df_result.index.name = self.var
+        
         return df_result
 
     def _mergebins(self, input_df, curtId, nextId) :
@@ -66,7 +69,9 @@ class monotoneTuner :
             
         df['del'] = np.zeros(len(df))
         df['id'] = [*range(1, len(df)+1)]
+        
         LoopWhile = True
+        
         while LoopWhile :
             idList = df['id'].to_list()
 
@@ -98,5 +103,6 @@ class monotoneTuner :
                                 else :
                                     sumDel = 0
             if sumDel == 0 :
-                LoopWhile = False     
+                LoopWhile = False
+         
         return df
