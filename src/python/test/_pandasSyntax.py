@@ -15,3 +15,19 @@ df1
 # %%
 
 # %%
+
+
+class TestOrder:
+    def print():
+        printA()
+        
+    def printA():
+        print("A")
+        
+#%%
+def initTable(dataframe, var, default) :
+    return dataframe.groupby(var)[default].agg(["count", "sum"]).reset_index().rename(columns = {"count":"Total", "sum" :"Bad"})
+      
+# %%
+initTable(df, "Durationinmonth", "default")
+# %%
