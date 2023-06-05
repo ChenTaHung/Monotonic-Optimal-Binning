@@ -134,8 +134,8 @@ class OptimalBinning :
                 df = self._mergeBins(optTable = df, mergeResult = mergeResultMatrix, mergeIndex = max_p_index)
                 if len(df) <= self.min_bins :
                     break    
-            elif (max_p <= self.pvalue) and (self._checkBinsCnt(df) > self.min_bins) : 
-                # if no p-value exceeds the p threshold, but bins cnt is greater than the 
+            elif (max_p <= self.pvalue) and (self._checkBinsCnt(df) > self.max_bins) : 
+                # if no p-value exceeds the p threshold, but bins cnt is greater than the maximum limitation
                 self._updatePvalue()
             else :
                 break
@@ -149,7 +149,7 @@ class OptimalBinning :
             completedTable = self.MFB(monoTable = df)
 
         else :
-            raise('Wrong Merging Method : <MFB> / <SFB>')
+            raise('Wrong Merging Method : <MFB> / <SFB> / <CMB>')
 
         return completedTable[['start', 'end', 'total', 'bads', 'mean']]
     

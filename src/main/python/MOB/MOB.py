@@ -129,33 +129,38 @@ class MOB:
             
     def plotBinsSummary(self, binSummaryTable):
         
-        fig, ax1 = plt.subplots(1,1,figsize = (16,10))
+        fig, ax1 = plt.subplots(1,1,figsize = (12,8))
         
         binSummaryTable['end'] = pd.Categorical(binSummaryTable['end'])
+        print(binSummaryTable.dtypes)
         # Plot bar chart for 'dist_obs'
-        bars = ax1.bar(np.arange(len(binSummaryTable['end'])), binSummaryTable['woe'], color='skyblue', alpha=0.5, width=0.75)
-        ax1.set_xticks(ticks = np.arange(len(binSummaryTable['end'])))
+        bars = ax1.bar(np.arange(len(binSummaryTable['end'])), binSummaryTable['woe'], color='skyblue', alpha=0.5, width=0.5)
+        ax1.set_xticks(ticks = np.arange(len(binSummaryTable['end'])), labels = binSummaryTable['end'])
         ax1.axhline(0)
         ax1.set_xlabel('Interval End Value')
         ax1.set_ylabel('WoE', color='blue')
 
 
         for i, bar in enumerate(bars):
-            height = bar.get_height()
-            ax1.annotate(f'{binSummaryTable["dist_obs"].iloc[i]:.1%}', xy=(bar.get_x() + bar.get_width() / 2, height),
-                        xytext=(0, 3), textcoords='offset points', ha='center', va='bottom')
+            # height = bar.get_height()
+            ax1.annotate(f'{binSummaryTable["dist_obs"].iloc[i]:.1%}', xy=(bar.get_x() + bar.get_width() / 2, 0.05),
+                        xytext=(0, 3), textcoords='offset points', ha='center', va='top', weight = 'bold')
 
         ax2 = ax1.twinx()
 
         # Plot line chart for 'bad_rate'
         ax2.plot(np.arange(len(binSummaryTable['end'])), binSummaryTable['bad_rate'], color='orange', label='Bad Rate', linewidth = 3)
         ax2.scatter(np.arange(len(binSummaryTable['end'])), binSummaryTable['bad_rate'], color='red', s = 80)
-        ax2.set_xticks(ticks = np.arange(len(binSummaryTable['end'])))
+        ax2.set_xticks(ticks = np.arange(len(binSummaryTable['end'])), labels = binSummaryTable['end'])
         ax2.set_ylabel('Bad Rate', color='red')
         
         for i, val in enumerate(binSummaryTable['bad_rate']):
-            ax2.annotate(f'{val:.1%}', xy=(i, val), xytext=(0, -10), textcoords='offset points', ha='center', va='top', )
+            ax2.annotate(f'{val:.1%}', xy=(i, val), xytext=(0, -10), textcoords='offset points', ha='center', va='top', weight = 'bold')
         
+        # set annotation for the text label 
+        # plt.text(1, 1, 'Bar Text : obs_dist', transform=plt.gca().transAxes, fontsize=12, verticalalignment='top')
+        
+        plt.legend(loc = 'best', labels = ['Bar Text : obs_dist', 'Dot Text : bad_rate'])
         # Set title
         plt.title(f'Bins Summart Plot - {self.var}')
 
