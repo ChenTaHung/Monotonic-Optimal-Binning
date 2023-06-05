@@ -45,15 +45,15 @@ class MonotoneNode:
 
 
 
-# if __name__ == "__main__" :
+# if __name__ == '__main__' :
 #     import pandas as pd
     
 #     def initTable(dataframe, var, default) :
-#         return dataframe.groupby(var)[default].agg(["count", "sum", "std"]).reset_index().rename(columns = {"count":"Total", "sum" :"Bad"}).fillna(0)
+#         return dataframe.groupby(var)[default].agg(['count', 'sum', 'std']).reset_index().rename(columns = {'count':'Total', 'sum' :'Bad'}).fillna(0)
     
-#     df = pd.read_csv("/Users/chentahung/Desktop/git/mob-py/data/german_data_credit_cat.csv")
-#     df["default"] = df["default"] - 1
-#     initTB = initTable(df, "Durationinmonth" ,"default")
+#     df = pd.read_csv('/Users/chentahung/Desktop/git/mob-py/data/german_data_credit_cat.csv')
+#     df['default'] = df['default'] - 1
+#     initTB = initTable(df, 'Durationinmonth' ,'default')
     
 #     root: MonotoneNode = MonotoneNode(0,0,0,0)
 #     cur: MonotoneNode = root
@@ -96,5 +96,5 @@ class MonotoneNode:
 #         meanList.append(cur.mean)
 #         cur = cur.next
     
-#     resDF = pd.DataFrame({"start":startValueList, "end": endValueList, "total": binTotalList, "bad": binBadList, "mean": meanList, "std": stdList})
+#     resDF = pd.DataFrame({'start':startValueList, 'end': endValueList, 'total': binTotalList, 'bad': binBadList, 'mean': meanList, 'std': stdList})
 #     print(resDF)
