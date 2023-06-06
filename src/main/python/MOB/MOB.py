@@ -69,7 +69,7 @@ class MOB:
         self.min_bads = min_bads
 
            
-    def summarizeBins(self, FinalOptTable):
+    def _summarizeBins(self, FinalOptTable):
         
         FinalOptTable = FinalOptTable[['start', 'end', 'total', 'bads', 'mean']].rename(columns = {'total': 'nsamples', 'bad' : 'bads', 'mean' : 'bad_rate'})
         FinalOptTable['dist_obs'] = FinalOptTable['nsamples'] / FinalOptTable['nsamples'].sum()
@@ -83,15 +83,18 @@ class MOB:
   
     
     def runMOB(self, mergeMethod) :
-        # Check Data Status (Missing and Exclud Value) 
-        MonotoneTuner = Monotone(data = self.df_sel, var = 'Durationinmonth', response = 'default')
+        # Monotone
+        MonotoneTuner = Monotone(data = self.df_sel, var = self.var, response = self.response)
         MonoTable = MonotoneTuner.tuneMonotone()
+        self.MonoTable = MonoTable
+        # Binning
         OptimalBinningMerger = OptimalBinning(resMonotoneTable = MonoTable, 
                                               max_bins = self.max_bins, min_bins = self.min_bins, 
                                               max_samples = self.max_samples, min_samples = self.min_samples, 
                                               min_bads = self.min_bads, init_pvalue = self.init_pvalue)
         finishBinningTable = OptimalBinningMerger.monoOptBinning(mergeMethod = mergeMethod)
-        
+        self.finishBinningTable = finishBinningTable
+        # Summary
         if self.isNaExist and self.isExcValueExist : #contains missing and exclude value
             
             missingDF = pd.DataFrame({
@@ -122,47 +125,60 @@ class MOB:
         else : # clean data with no missing and special values
             completeBinningTable = finishBinningTable
             
-        outputTable = self.summarizeBins(FinalOptTable = completeBinningTable)
+        outputTable = self._summarizeBins(FinalOptTable = completeBinningTable)
         
         return outputTable
             
             
-    def plotBinsSummary(self, binSummaryTable):
+    def plotBinsSummary(self, binSummaryTable, bar_fill = 'skyblue', bar_alpha = 0.5, bar_width = 0.5, bar_text_color = 'darkblue', 
+                        line_color = 'orange', line_width = 3, dot_color = 'red', dot_size = 80, annotation_font_weight = 'bold'):
         
         fig, ax1 = plt.subplots(1,1,figsize = (12,8))
         
         binSummaryTable['end'] = pd.Categorical(binSummaryTable['end'])
-        print(binSummaryTable.dtypes)
+
         # Plot bar chart for 'dist_obs'
-        bars = ax1.bar(np.arange(len(binSummaryTable['end'])), binSummaryTable['woe'], color='skyblue', alpha=0.5, width=0.5)
+        bars = ax1.bar(np.arange(len(binSummaryTable['end'])), binSummaryTable['woe'], color = bar_fill, alpha = bar_alpha, width = bar_width)
         ax1.set_xticks(ticks = np.arange(len(binSummaryTable['end'])), labels = binSummaryTable['end'])
         ax1.axhline(0)
         ax1.set_xlabel('Interval End Value')
-        ax1.set_ylabel('WoE', color='blue')
+        ax1.set_ylabel('WoE', color = bar_text_color)
 
-
+        # Add text
         for i, bar in enumerate(bars):
-            # height = bar.get_height()
-            ax1.annotate(f'{binSummaryTable["dist_obs"].iloc[i]:.1%}', xy=(bar.get_x() + bar.get_width() / 2, 0.05),
-                        xytext=(0, 3), textcoords='offset points', ha='center', va='top', weight = 'bold')
-
+            height = bar.get_height()
+            if height >= 0 :
+                ax1.annotate(f'{binSummaryTable["dist_obs"].iloc[i]:.1%}', xy=(bar.get_x() + bar.get_width() / 2, height),
+                            xytext=(0, 10), textcoords='offset points', ha='center', va='top', weight = annotation_font_weight, c = bar_text_color)
+            else :
+                ax1.annotate(f'{binSummaryTable["dist_obs"].iloc[i]:.1%}', xy=(bar.get_x() + bar.get_width() / 2, height),
+                            xytext=(0, -8), textcoords='offset points', ha='center', va='top', weight = annotation_font_weight, c = bar_text_color)
         ax2 = ax1.twinx()
 
         # Plot line chart for 'bad_rate'
-        ax2.plot(np.arange(len(binSummaryTable['end'])), binSummaryTable['bad_rate'], color='orange', label='Bad Rate', linewidth = 3)
-        ax2.scatter(np.arange(len(binSummaryTable['end'])), binSummaryTable['bad_rate'], color='red', s = 80)
+        ax2.plot(np.arange(len(binSummaryTable['end'])), binSummaryTable['bad_rate'], color=line_color, label='Bad Rate', linewidth = line_width)
+        ax2.scatter(np.arange(len(binSummaryTable['end'])), binSummaryTable['bad_rate'], color=dot_color, s = dot_size)
         ax2.set_xticks(ticks = np.arange(len(binSummaryTable['end'])), labels = binSummaryTable['end'])
-        ax2.set_ylabel('Bad Rate', color='red')
+        ax2.set_ylabel('Bad Rate', color=dot_color)
         
-        for i, val in enumerate(binSummaryTable['bad_rate']):
-            ax2.annotate(f'{val:.1%}', xy=(i, val), xytext=(0, -10), textcoords='offset points', ha='center', va='top', weight = 'bold')
-        
-        # set annotation for the text label 
-        # plt.text(1, 1, 'Bar Text : obs_dist', transform=plt.gca().transAxes, fontsize=12, verticalalignment='top')
-        
-        plt.legend(loc = 'best', labels = ['Bar Text : obs_dist', 'Dot Text : bad_rate'])
+        # Add text
+        med = binSummaryTable['bad_rate'].median()
+        if binSummaryTable.iloc[-1, 4] - binSummaryTable.iloc[0, 4] > 0 :
+            for i, val in enumerate(binSummaryTable['bad_rate']):
+                if val <= med :
+                    ax2.annotate(f'{val:.1%}', xy=(i, val), xytext=(0, -7.5), textcoords='offset points', ha='left', va='top', weight = annotation_font_weight, c = dot_color)
+                else :
+                    ax2.annotate(f'{val:.1%}', xy=(i, val), xytext=(0, 7.5), textcoords='offset points', ha='right', va='bottom', weight = annotation_font_weight, c = dot_color)
+        else :
+            for i, val in enumerate(binSummaryTable['bad_rate']):
+                if val <= med :
+                    ax2.annotate(f'{val:.1%}', xy=(i, val), xytext=(0, -7.5), textcoords='offset points', ha='right', va='top', weight = annotation_font_weight, c = dot_color)
+                else :
+                    ax2.annotate(f'{val:.1%}', xy=(i, val), xytext=(0, 7.5), textcoords='offset points', ha='left', va='bottom', weight = annotation_font_weight, c = dot_color)
+        # Set Legend        
+        plt.legend(labels = ['Bar Text : obs_dist', 'Dot Text : bad_rate'], loc = 'lower center')
         # Set title
-        plt.title(f'Bins Summart Plot - {self.var}')
+        plt.title(f'Bins Summary Plot - {self.var}')
 
         # Show the plot
         plt.show()

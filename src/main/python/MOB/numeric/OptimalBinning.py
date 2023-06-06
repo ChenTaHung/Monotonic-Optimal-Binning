@@ -26,7 +26,7 @@ class OptimalBinning :
         self.pvalue = init_pvalue
         
       
-    def runTwoSampleTTest(self, bin1_mean, bin2_mean, bin1_std, bin2_std, bin1_total, bin2_total) -> list:
+    def _runTwoSampleTTest(self, mergeMethod, bin1_mean, bin2_mean, bin1_std, bin2_std, bin1_total, bin2_total) -> list:
         '''
         two-tailed Test
         H0 : mu_A  = mu_B
@@ -46,23 +46,35 @@ class OptimalBinning :
         
         pooled_std = ((bin1_total - 1) * bin1_std ** 2 + (bin2_total - 1) * bin2_std ** 2) / dof
         
-        if pooled_std > 0 :
-            z = (bin1_mean - bin2_mean) / (pooled_std * ((1 / bin1_total) + (1 / bin2_total))) ** 0.5
-        # using student's T dist to calculate p-value, when dof is large enough, it will approach to normal dist
-            p_value =  2 * (1 - scipy.stats.t.cdf(abs(z), df = dof)) 
-        else :
-            p_value =  2
+        if mergeMethod in ['MFB','SFB'] :
+            if pooled_std > 0 :
+                z = (bin1_mean - bin2_mean) / (pooled_std * ((1 / bin1_total) + (1 / bin2_total))) ** 0.5
+            # using student's T dist to calculate p-value, when dof is large enough, it will approach to normal dist
+                p_value =  2 * (1 - scipy.stats.t.cdf(abs(z), df = dof)) 
+            else :
+                p_value =  2
+                
+            if (bin1_total < self.min_samples) or (bin2_total < self.min_samples):
+                p_value += 1
+                
+            if (bin1_mean * bin1_total < self.min_bads) or (bin2_mean * bin2_total < self.min_bads) :
+                p_value += 2
+
+            if (newTotal * newMean) < self.min_bads :
+                p_value += 3
             
-        if (bin1_total < self.min_samples) or (bin2_total < self.min_samples):
-            p_value += 1
-            
-        if (bin1_mean * bin1_total < self.min_bads) or (bin2_mean * bin2_total < self.min_bads) :
-            p_value += 2
-        
+            if mergeMethod == 'SFB' :
+                if newTotal >= self.max_samples : 
+                    # make sure not to merge the two bins which will generate bins dist > max_samples
+                    p_value *= -1
+                
+                if newTotal < self.min_samples :
+                    p_value += 3
+
         return [p_value, newTotal, newMean, pooled_std**0.5]
         
     
-    def calculateAdjacentPValue(self, optTable) -> list:
+    def _calculateAdjacentPValue(self, optTable, mergeMethod) -> list:
         p_value_list = []
         num_bins = len(optTable)
         
@@ -74,12 +86,9 @@ class OptimalBinning :
             bin1_obs  = optTable.loc[i, 'total']
             bin2_obs  = optTable.loc[i + 1, 'total']
             
-            p_value_list.append(self.runTwoSampleTTest(bin1_mean, bin2_mean, bin1_std, bin2_std, bin1_obs, bin2_obs))
+            p_value_list.append(self._runTwoSampleTTest(mergeMethod, bin1_mean, bin2_mean, bin1_std, bin2_std, bin1_obs, bin2_obs))
 
         return p_value_list
-    
-    def _checkBinsCnt(self, optTable) :
-        return len(optTable)
 
     def _mergeBins(self, optTable, mergeResult, mergeIndex) :
         newStart = optTable.loc[mergeIndex, 'start']
@@ -113,41 +122,49 @@ class OptimalBinning :
         else :
             self.pvalue *= 0.1
             
-    def MFB(self, monoTable):
+    def _OptBinning(self, monoTable, mergeMethod :str):
         df = monoTable.copy()
-        # assign a initial p_value list contains all 1 to start the while loop.
-        p_value_array = np.repeat(1, len(df) - 1)
         
-        iter = 1
+        if len(df) <= self.max_bins :
+            return df
+        else :
+            # assign a initial p_value list contains all 1 to start the while loop.
+            p_value_array = np.repeat(1, len(df) - 1)
+            while (p_value_array > self.pvalue).sum() > 0 :
+
+                # calculate p-value for all adjacent bin pairs
+                mergeResultMatrix = np.array(self._calculateAdjacentPValue(df, mergeMethod))
+                p_value_array = mergeResultMatrix[:, 0] # [p_value, newTotal, newMean, pooled_std**0.5]
+
+                # find maximum p-value index 
+                max_p_index = np.where(p_value_array == np.max(p_value_array))[0][0] # no matter the length of maximum p-value index, only get the first one
+                max_p = p_value_array[max_p_index]
+
+                if max_p > self.pvalue : # if accept null hypothesis, merge the two bins.
+                    df = self._mergeBins(optTable = df, mergeResult = mergeResultMatrix, mergeIndex = max_p_index)
+                    
+                    if len(df) - ((p_value_array > self.pvalue).sum()) >= self.min_bins : 
+                        continue
+                    else:
+                        # if the result that merge all the bins lower than the threshold still > min_bins then go ahead.
+                        if len(df) <= self.min_bins :
+                            break
+                        else :
+                            continue
+
+                elif (max_p <= self.pvalue) and (len(df) > self.max_bins) : 
+                    # if no p-value exceeds the p threshold, but bins cnt is greater than the maximum limitation
+                    self._updatePvalue()
+                else :
+                    break
+            
+            return df
         
-        while (p_value_array > self.pvalue).sum() > 0 :
-
-            # calculate p-value for all adjacent bin pairs
-            mergeResultMatrix = np.array(self.calculateAdjacentPValue(df))
-            p_value_array = mergeResultMatrix[:, 0] # [p_value, newTotal, newMean, pooled_std**0.5]
-
-            # find maximum p-value index 
-            max_p_index = np.where(p_value_array == np.max(p_value_array))[0][0] # no matter the length of maximum p-value index, only get the first one
-            max_p = p_value_array[max_p_index]
-
-            if max_p > self.pvalue : # if accept null hypothesis, merge the two bins.
-                df = self._mergeBins(optTable = df, mergeResult = mergeResultMatrix, mergeIndex = max_p_index)
-                if len(df) <= self.min_bins :
-                    break    
-            elif (max_p <= self.pvalue) and (self._checkBinsCnt(df) > self.max_bins) : 
-                # if no p-value exceeds the p threshold, but bins cnt is greater than the maximum limitation
-                self._updatePvalue()
-            else :
-                break
-        
-        return df
-    
     def monoOptBinning(self, mergeMethod :str = 'MFB') :
         df = self.MonoDf.copy()
         
-        if mergeMethod == 'MFB' :
-            completedTable = self.MFB(monoTable = df)
-
+        if mergeMethod in ['MFB', 'SFB', 'CMB'] :
+            completedTable = self._OptBinning(monoTable = df, mergeMethod = mergeMethod)
         else :
             raise('Wrong Merging Method : <MFB> / <SFB> / <CMB>')
 
