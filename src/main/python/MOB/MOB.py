@@ -1,4 +1,3 @@
-#%%
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -60,13 +59,14 @@ class MOB:
         self.isNaExist = _isNaExist
         self.isExcValueExist = _isExcValueExist
     
-    def setBinningConstraints(self, max_bins :int, min_bins :int, max_samples , min_samples, min_bads, init_pvalue: float) -> None:
+    def setBinningConstraints(self, max_bins :int, min_bins :int, max_samples , min_samples, min_bads, init_pvalue: float, maximize_bins :bool = False) -> None:
         self.max_bins = max_bins
         self.min_bins = min_bins
         self.init_pvalue = init_pvalue
         self.max_samples = max_samples
         self.min_samples = min_samples
         self.min_bads = min_bads
+        self.maximize_bins = maximize_bins
 
            
     def _summarizeBins(self, FinalOptTable):
@@ -91,7 +91,9 @@ class MOB:
         OptimalBinningMerger = OptimalBinning(resMonotoneTable = MonoTable, 
                                               max_bins = self.max_bins, min_bins = self.min_bins, 
                                               max_samples = self.max_samples, min_samples = self.min_samples, 
-                                              min_bads = self.min_bads, init_pvalue = self.init_pvalue)
+                                              min_bads = self.min_bads, init_pvalue = self.init_pvalue,
+                                              maximize_bins = self.maximize_bins)
+        
         finishBinningTable = OptimalBinningMerger.monoOptBinning(mergeMethod = mergeMethod)
         self.finishBinningTable = finishBinningTable
         # Summary
@@ -182,5 +184,3 @@ class MOB:
 
         # Show the plot
         plt.show()
-
-    # %%

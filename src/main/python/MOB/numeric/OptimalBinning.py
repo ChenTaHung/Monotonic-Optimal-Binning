@@ -3,7 +3,7 @@ import numpy as np
 import scipy.stats
 
 class OptimalBinning :
-    def __init__(self, resMonotoneTable, max_bins, min_bins, max_samples, min_samples, min_bads, init_pvalue) :
+    def __init__(self, resMonotoneTable, max_bins :int, min_bins:int, max_samples, min_samples, min_bads, init_pvalue :float, maximize_bins :bool) :
         self.MonoDf = resMonotoneTable
         self.max_bins = max_bins
         self.min_bins = min_bins
@@ -24,6 +24,7 @@ class OptimalBinning :
             self.min_bads = min_bads
         
         self.pvalue = init_pvalue
+        self.maximize_bins = maximize_bins
         
       
     def _runTwoSampleTTest(self, mergeMethod, bin1_mean, bin2_mean, bin1_std, bin2_std, bin1_total, bin2_total) -> list:
@@ -144,13 +145,22 @@ class OptimalBinning :
                     df = self._mergeBins(optTable = df, mergeResult = mergeResultMatrix, mergeIndex = max_p_index)
                     
                     if len(df) - ((p_value_array > self.pvalue).sum()) >= self.min_bins : 
+                        # if the result that merge all the bins lower than the threshold still > min_bins then go ahead.
                         continue
                     else:
-                        # if the result that merge all the bins lower than the threshold still > min_bins then go ahead.
-                        if len(df) <= self.min_bins :
-                            break
+                        if self.maximize_bins :
+                            if (df['total'].min() < self.min_samples) and (len(df) > self.min_bins) :
+                                continue
+                            else :
+                                if len(df) <= self.max_bins :
+                                    break
+                                else :
+                                    continue
                         else :
-                            continue
+                            if len(df) <= self.min_bins :
+                                break
+                            else :
+                                continue
 
                 elif (max_p <= self.pvalue) and (len(df) > self.max_bins) : 
                     # if no p-value exceeds the p threshold, but bins cnt is greater than the maximum limitation
