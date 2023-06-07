@@ -1,4 +1,3 @@
-#%%
 import pandas as pd
 import numpy as np
 import os
@@ -22,3 +21,10 @@ if __name__ == '__main__' :
     MFB = MOB_ALGO.runMOB(mergeMethod='MFB')
     print(MFB)
     MOB_ALGO.plotBinsSummary(binSummaryTable = MFB)
+
+
+
+'''
+代辦：
+Missing Data bads = 0 時候 woe 計算 （exc_value 同理）
+'''

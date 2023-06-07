@@ -82,10 +82,10 @@ class MOB:
         return FinalOptTable      
   
     
-    def runMOB(self, mergeMethod) :
+    def runMOB(self, mergeMethod, sign = 'auto') :
         # Monotone
         MonotoneTuner = Monotone(data = self.df_sel, var = self.var, response = self.response)
-        MonoTable = MonotoneTuner.tuneMonotone()
+        MonoTable = MonotoneTuner.tuneMonotone(sign = sign)
         self.MonoTable = MonoTable
         # Binning
         OptimalBinningMerger = OptimalBinning(resMonotoneTable = MonoTable, 
@@ -180,7 +180,7 @@ class MOB:
         # Set Legend        
         plt.legend(labels = ['Bar Text : obs_dist', 'Dot Text : bad_rate'], loc = 'lower center')
         # Set title
-        plt.title(f'Bins Summary Plot - {self.var}')
+        plt.title(f'Bins Summary Plot - {self.var} \n IV : {(binSummaryTable["iv_grp"].sum()):.4f}')
 
         # Show the plot
         plt.show()
