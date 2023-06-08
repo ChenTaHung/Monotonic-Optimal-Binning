@@ -59,7 +59,7 @@ class MOB:
         self.isNaExist = _isNaExist
         self.isExcValueExist = _isExcValueExist
     
-    def setBinningConstraints(self, max_bins :int, min_bins :int, max_samples , min_samples, min_bads, init_pvalue: float, maximize_bins :bool = False) -> None:
+    def setBinningConstraints(self, max_bins :int = 6, min_bins :int = 4, max_samples = 0.4, min_samples = 0.05, min_bads = 0.05, init_pvalue: float = 0.4, maximize_bins :bool = True) -> None:
         self.max_bins = max_bins
         self.min_bins = min_bins
         self.init_pvalue = init_pvalue
