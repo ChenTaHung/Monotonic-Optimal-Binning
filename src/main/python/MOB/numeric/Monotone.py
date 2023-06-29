@@ -1,4 +1,7 @@
+#%%
 import pandas as pd
+import os
+os.chdir('/Users/chentahung/Desktop/git/mob-py/src/main/python')
 from MOB.numeric.MonotoneNode import MonotoneNode
 
 class Monotone :
@@ -10,20 +13,39 @@ class Monotone :
         '''
         
         if len(data[response].unique()) != 2:
-            raise ValueError(f'More than two unique observations in response Verb : {self.response} ')
+            raise ValueError(f'More than two unique observations in response Verb : {response}')
         
         if data[response].dtypes == 'object' :
-            self.responseType = 'cat'
-        else :
-            self.responseType = 'num'
+            raise ValueError(f'Please change the response variable into numeric with `1` represent positive and `0` represent the other')
         
-        self.data = data
-        self.var = var
-        self.response = response
-        self.metric = metric
-        self.exclude_value = exclude_value
+        self._data = data
+        self._var = var
+        self._response = response
+        self._metric = metric
+        self._exclude_value = exclude_value
+            
 
-    def _selectSign(self) -> str:
+    @property
+    def data(self) :
+        return self._data
+    
+    @property
+    def var(self) :
+        return self._var
+    
+    @property
+    def response(self) :
+        return self._response
+
+    @property
+    def metric(self) :
+        return self._metric
+    
+    @property
+    def exclude_value(self) :
+        return self._exclude_value
+    
+    def __selectSign(self) -> str:
         '''
         decide `sign` argument
         '''
@@ -34,7 +56,7 @@ class Monotone :
         
         return sign
     
-    def _initMonoTable(self) :
+    def __initMonoTable(self) :
         '''
         initialize sorted table to check constraints or reverse trend on metric
         '''
@@ -50,12 +72,12 @@ class Monotone :
         
     def tuneMonotone(self, initialization : bool = True, sign = 'auto'):
         if sign == 'auto' :
-            sign = self._selectSign()
+            sign = self.__selectSign()
         else :
             sign = sign
 
         if initialization :
-            df = self._initMonoTable()
+            df = self.__initMonoTable()
         else : 
             df = self.data.copy()
             
@@ -63,12 +85,18 @@ class Monotone :
         cur: MonotoneNode = root
         
         # assign each node for the double linked list
+  
+        # TODO : take `MonotoneNode` out of the for loop to new the object only once :
+        # TODO :    we update the element in the MonotoneNode in the for loop. 
+        # TODO :    Delete the value of the variable after every update.    
+     
         for row in df.values:
             _tmp = MonotoneNode(Value = row[0], FirstTotal = row[1], FirstBad = row[2], FirstStd = row[3]) #define every node
             cur.next = _tmp
             _tmp.pre = cur
             cur = cur.next
-        
+
+
         root = root.next # start from index = 1, `cur` compares with `cur.pre`
         root.pre = None
 
@@ -106,8 +134,8 @@ class Monotone :
         meanList = []
         stdList = []
         while cur is not None:
-            startValueList.append(cur.startValue)
-            endValueList.append(cur.endValue)
+            startValueList.append(str(cur.startValue))
+            endValueList.append(str(cur.endValue))
             binTotalList.append(cur.cumTotal)
             binBadList.append(cur.cumBad)
             stdList.append(cur.cumStd)
@@ -118,10 +146,11 @@ class Monotone :
         return resDF
     
 # %%
-# if __name__ == '__main__' :
-#     df = pd.read_csv('/Users/chentahung/Desktop/git/mob-py/data/german_data_credit_cat.csv')
-#     df['default'] = df['default'] - 1
+if __name__ == '__main__' :
+    df = pd.read_csv('/Users/chentahung/Desktop/git/mob-py/data/german_data_credit_cat.csv')
+    df['default'] = df['default'] - 1
     
-#     M = Monotone(data = df, var = 'Durationinmonth', response = 'default')
-#     res = M.tuneMonotone()
-#     print(res)
+    M = Monotone(data = df, var = 'Durationinmonth', response = 'default')
+    res = M.tuneMonotone()
+    print(res)
+# %%
