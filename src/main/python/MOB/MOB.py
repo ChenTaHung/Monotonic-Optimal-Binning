@@ -9,6 +9,7 @@ class MOB:
         self._var = var
         self._response = response 
         self._exclude_value = exclude_value
+        self._constraintsStatus = False
         '''
         _isNaExist : check Missing Existance
         _isExcValueExist : check Exclude Value Existance
@@ -26,11 +27,15 @@ class MOB:
         
         # check exclude values exist
         if isinstance(exclude_value, list) :
-            if len(self._data[self._var].isin(exclude_value)).sum() > 0 : #contains exclude value
+            if self._data[self._var].isin(exclude_value).sum() > 0 : #contains exclude value
                 _isExcValueExist = True
+            else :
+                _isExcValueExist = False
         elif isinstance(exclude_value, (float, int)) :
-            if len(self._data[self._var].isin([exclude_value])).sum() > 0 :
+            if self._data[self._var].isin([exclude_value]).sum() > 0 :
                 _isExcValueExist = True
+            else :
+                _isExcValueExist = False
         elif exclude_value == None :
             _isExcValueExist = False
         else :
@@ -93,6 +98,10 @@ class MOB:
         return self._exclude_value
 
     @property
+    def constraintsStatus(self):
+        return self._constraintsStatus
+    
+    @property
     def isNaExist(self):
         return self._isNaExist
     
@@ -122,37 +131,22 @@ class MOB:
     @property
     def min_bins(self):
         return self._min_bins
-    # @min_bins.setter
-    # def min_bins(self, value):
-    #     self._min_bins = value
         
     @property
     def init_pvalue(self) :
         return self._init_pvalue
-    # @init_pvalue.setter
-    # def init_pvalue(self, value):
-    #     self._init_pvalue = value
         
     @property
     def max_samples(self) :
         return self._max_samples
-    # @max_samples.setter
-    # def max_samples(self, value) :
-    #     self._max_samples = value
-        
+
     @property
     def min_samples(self) :
         return self._min_samples
-    # @min_samples.setter
-    # def min_samples(self, value) :
-    #     self._min_samples = value
     
     @property
     def min_bads(self):
         return self._min_bads
-    # @min_bads.setter
-    # def min_bads(self, value) :
-    #     self._min_bads = value
     
     @property
     def maximize_bins(self) :
@@ -170,7 +164,7 @@ class MOB:
         self._min_samples = min_samples
         self._min_bads = min_bads
         self._maximize_bins = maximize_bins
-
+        self._constraintsStatus = True
            
     def __summarizeBins(self, FinalOptTable):
         
@@ -184,8 +178,10 @@ class MOB:
         
         return FinalOptTable      
       
-    
     def runMOB(self, mergeMethod, sign = 'auto') :
+        if self.constraintsStatus == False :
+            raise Exception('Please set the constraints first by using "setBinningConstraints" method.')
+        
         # Monotone
         MonotoneTuner = Monotone(data = self.df_sel, var = self.var, response = self.response)
         MonoTable = MonotoneTuner.tuneMonotone(sign = sign)

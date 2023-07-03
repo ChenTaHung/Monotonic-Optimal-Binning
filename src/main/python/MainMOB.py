@@ -1,18 +1,16 @@
 #%%
 import pandas as pd
-import numpy as np
 import os
 os.chdir(os.getcwd())
 from MOB.MOB import MOB
 from MOB.plot.MOB_PLOT import MOB_PLOT
 #%%
 if __name__ == '__main__' :
-    print("A")
     df = pd.read_csv('/Users/chentahung/Desktop/git/mob-py/data/german_data_credit_cat.csv')
     df['default'] = df['default'] - 1
     for x in df.columns[df.dtypes != 'object'] :
         if x != 'default'  :
-            MOB_ALGO = MOB(data = df, var = x, response = "default", exclude_value = 0) 
+            MOB_ALGO = MOB(data = df, var = x, response = 'default', exclude_value = 0) 
             MOB_ALGO.setBinningConstraints( max_bins = 6, min_bins = 3, 
                                             max_samples = 0.4, min_samples = 0.05, 
                                             min_bads = 0.05, 
