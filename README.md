@@ -89,23 +89,26 @@ MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning, var_name = 'Durationinm
 
 ```
 
-<table style="width: 100%;">
-  <thead>
-    <tr>
-      <th style = 'text-align: center'>SizeBinning</th>
-      <th style = 'text-align: center'>StatsBinning</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td style = 'text-align: center'>mergeMethod = 'Size' (bins size base)</td>
-      <td style = 'text-align: center'>mergeMethod = 'Stats' (statistical base)</td>
-    </tr>
-</table>
+<div style="width: 100%;">
+  <table style="width: 100%;">
+    <thead>
+      <tr>
+        <th style="text-align: center;">SizeBinning</th>
+        <th style="text-align: center;">StatsBinning</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="text-align: center;">mergeMethod = 'Size' (bins size base)</td>
+        <td style="text-align: center;">mergeMethod = 'Stats' (statistical base)</td>
+      </tr>
+    </tbody>
+  </table>
 
-<div style="display: flex; justify-content: center;">
-  <img src='doc/charts/Creditamount-Size.png' alt="Image 1" style="display: inline-block; width: 50%;" />
-  <img src='doc/charts/Creditamount-Stats.png' alt="Image 2" style="display: inline-block; width: 50%;" />
+  <div style="display: flex; justify-content: center;">
+    <img src="doc/charts/Creditamount-Size.png" alt="Image 1" style="width: 50%;" />
+    <img src="doc/charts/Creditamount-Stats.png" alt="Image 2" style="width: 50%;" />
+  </div>
 </div>
 <br>
 
