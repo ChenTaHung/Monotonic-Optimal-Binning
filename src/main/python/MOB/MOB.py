@@ -176,6 +176,7 @@ class MOB:
         FinalOptTable['woe'] = np.log(FinalOptTable['dist_goods']/FinalOptTable['dist_bads'])
         FinalOptTable['iv_grp'] = (FinalOptTable['dist_goods'] - FinalOptTable['dist_bads']) * FinalOptTable['woe']
         
+        # TODO : Missing Data bads = 0 時候 woe 計算 (exc_value 同理） adjusted woe
         return FinalOptTable      
       
     def runMOB(self, mergeMethod, sign = 'auto') :
@@ -235,8 +236,3 @@ class MOB:
         outputTable = self.__summarizeBins(FinalOptTable = completeBinningTable)
         
         return outputTable
-    
-
-    # @finishBinningTable.setter
-    # def finishBinningTable(self, value) :
-    #     self._finishBinningTable = value

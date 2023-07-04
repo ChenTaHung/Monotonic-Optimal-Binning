@@ -6,7 +6,8 @@ class MOB_PLOT :
         
     @staticmethod
     def plotBinsSummary(monoOptBinTable, var_name, bar_fill = 'skyblue', bar_alpha = 0.5, bar_width = 0.5, bar_text_color = 'darkblue', 
-                        line_color = 'orange', line_width = 3, dot_color = 'red', dot_size = 80, annotation_font_weight = 'bold'):
+                        line_color = 'orange', line_width = 3, dot_color = 'red', dot_size = 80, annotation_font_weight = 'bold', 
+                        figsavePath: str = None , dpi:int = 300):
         
         fig, ax1 = plt.subplots(1,1,figsize = (12,8))
         binSummaryTable = monoOptBinTable.copy()
@@ -55,5 +56,7 @@ class MOB_PLOT :
         # Set title
         plt.title(f'Bins Summary Plot - {var_name} \n IV : {(binSummaryTable["iv_grp"].sum()):.4f}')
 
+        if figsavePath != None :
+            plt.savefig(figsavePath, dpi = dpi)
         # Show the plot
         plt.show()

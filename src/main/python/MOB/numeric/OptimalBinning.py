@@ -276,17 +276,17 @@ class OptimalBinning :
     
 #%%
 
-if __name__ == '__main__' :
-    df = pd.read_csv('/Users/chentahung/Desktop/git/mob-py/data/german_data_credit_cat.csv')
-    df['default'] = df['default'] - 1
-    import os
-    os.chdir('/Users/chentahung/Desktop/git/mob-py/src/main/python/MOB')
-    from numeric.Monotone import Monotone
+# if __name__ == '__main__' :
+#     df = pd.read_csv('/Users/chentahung/Desktop/git/mob-py/data/german_data_credit_cat.csv')
+#     df['default'] = df['default'] - 1
+#     import os
+#     os.chdir('/Users/chentahung/Desktop/git/mob-py/src/main/python/MOB')
+#     from numeric.Monotone import Monotone
     
-    M = Monotone(data = df, var = 'Durationinmonth', response = 'default')
-    res = M.tuneMonotone()
+#     M = Monotone(data = df, var = 'Durationinmonth', response = 'default')
+#     res = M.tuneMonotone()
     
-    O = OptimalBinning(resMonotoneTable = res, max_bins=6, min_bins=4, max_samples = 0.4, min_samples=0.05, min_bads=0.05, init_pvalue=0.4, maximize_bins = True)
-    Binres = O.monoOptBinning()
-    print(Binres)
+#     O = OptimalBinning(resMonotoneTable = res, max_bins=6, min_bins=4, max_samples = 0.4, min_samples=0.05, min_bads=0.05, init_pvalue=0.4, maximize_bins = True)
+#     Binres = O.monoOptBinning()
+#     print(Binres)
 # %%

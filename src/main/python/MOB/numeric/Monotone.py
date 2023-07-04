@@ -1,7 +1,7 @@
 #%%
 import pandas as pd
 import os
-os.chdir('/Users/chentahung/Desktop/git/mob-py/src/main/python')
+# os.chdir('/Users/chentahung/Desktop/git/mob-py/src/main/python')
 from MOB.numeric.MonotoneNode import MonotoneNode
 
 class Monotone :
@@ -146,11 +146,11 @@ class Monotone :
         return resDF
     
 # %%
-if __name__ == '__main__' :
-    df = pd.read_csv('/Users/chentahung/Desktop/git/mob-py/data/german_data_credit_cat.csv')
-    df['default'] = df['default'] - 1
+# if __name__ == '__main__' :
+#     df = pd.read_csv('/Users/chentahung/Desktop/git/mob-py/data/german_data_credit_cat.csv')
+#     df['default'] = df['default'] - 1
     
-    M = Monotone(data = df, var = 'Durationinmonth', response = 'default')
-    res = M.tuneMonotone()
-    print(res)
+#     M = Monotone(data = df, var = 'Durationinmonth', response = 'default')
+#     res = M.tuneMonotone()
+#     print(res)
 # %%
