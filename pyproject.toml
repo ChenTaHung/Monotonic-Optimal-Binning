@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "MOBPY"
-version = "1.0"
+version = "1.0.6"
 authors = [
   { name="Chen, Ta-Hung", email="denny20700@gmail.com" }
 ]

@@ -2,12 +2,12 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
-os.chdir('/Users/chentahung/Desktop/git/mob-py/src/main/python')
-from MOB.MOB import MOB
-from MOB.plot.MOB_PLOT import MOB_PLOT
+os.chdir('/***/***/***/***/***/***/***/mob-py/src/main/python')
+from MOBPY.MOB import MOB
+from MOBPY.plot.MOB_PLOT import MOB_PLOT
 #%%
 if __name__ == '__main__' :
-    df = pd.read_csv('/Users/chentahung/Desktop/git/mob-py/data/german_data_credit_cat.csv')
+    df = pd.read_csv('/***/***/***/***/***/***/***/git/mob-py/data/german_data_credit_cat.csv')
     df['default'] = df['default'] - 1
     # A simple sample to generate the MOB result for numeric columns in the dataset.
     for x in df.columns[df.dtypes != 'object'] :
@@ -26,7 +26,7 @@ if __name__ == '__main__' :
             print('Bins Size Base')
             if x in ['Durationinmonth', 'Creditamount'] :
                 MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning, var_name = x, 
-                                         figsavePath = f'/Users/chentahung/Desktop/git/mob-py/doc/charts/{x}-Size.png', dpi = 800)
+                                         figsavePath = f'/***/***/***/***/***/***/***/git/mob-py/doc/charts/{x}-Size.png', dpi = 800)
             else :
                 MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning, var_name = x)
                 
@@ -55,3 +55,5 @@ if __name__ == '__main__' :
     
     StatsBinning = MOB_ALGO.runMOB(mergeMethod='Stats')
     
+
+# %%

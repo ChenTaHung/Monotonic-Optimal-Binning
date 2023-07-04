@@ -6,7 +6,9 @@
 
 ---
 
-So far, we only support `git clone`. 
+```bash
+python3 -m pip install MOBPY
+```
 
 <h2><strong> Usage </strong></h2>
 
@@ -21,7 +23,7 @@ from MOBPY.MOB import MOB
 
 if __name__ == '__main__' :
     # import the testing datasets
-    df = pd.read_csv('/Users/chentahung/Desktop/git/mob-py/data/german_data_credit_cat.csv')
+    df = pd.read_csv('/data/german_data_credit_cat.csv')
     
     # Original values in the column are [1,2], make it into 1 representing the positive term, and 0 for the other one.
     df['default'] = df['default'] - 1

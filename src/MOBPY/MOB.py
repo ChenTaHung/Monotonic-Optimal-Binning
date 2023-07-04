@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
-from MOB.numeric.Monotone import Monotone
-from MOB.numeric.OptimalBinning import OptimalBinning
+from MOBPY.numeric.Monotone import Monotone
+from MOBPY.numeric.OptimalBinning import OptimalBinning
 
 class MOB:
     def __init__(self, data, var, response, exclude_value = None) :

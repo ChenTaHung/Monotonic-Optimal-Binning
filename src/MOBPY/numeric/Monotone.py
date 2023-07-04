@@ -2,7 +2,7 @@
 import pandas as pd
 import os
 # os.chdir('/Users/chentahung/Desktop/git/mob-py/src/main/python')
-from MOB.numeric.MonotoneNode import MonotoneNode
+from MOBPY.numeric.MonotoneNode import MonotoneNode
 
 class Monotone :
     def __init__(self, data, var, response, exclude_value = None, metric = 'mean') :
