@@ -61,6 +61,15 @@ MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning, var_name = 'Durationinm
 <p align = 'center'><img src = 'https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/charts/Durationinmonth-Size.png' alt = 'Image' style = 'width: 1200px'/></p>
 
 
+<h2> <strong> Highlighted Features </strong></h2>
+
+**_User Preferences_**:
+
+The MOB algorithm offers two user preference settings (**`mergeMethod`** argument):
+
+1. `Size`: This setting allows you to optimize the sample size of each bin within specified maximum and minimum limits while ensuring that the minimum number of bins constraint is maintained.
+
+2. `Stats`: With this setting, the algorithm applies a stricter approach based on hypothesis testing results.<br>
 
 
 Normally, the result of `Stats` (statistical base) and `Size` (bins size base) will be identical, but when the data appears to be quite extreme in the binning process, the `Size` method will prefer to make the population of each bin between the maximum and minimum limitation, while the `Stats` method will remain to conduct the algorithm through a stricter logic based on the testing hypothesis results.
@@ -86,18 +95,6 @@ MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning, var_name = 'Durationinmo
 print('Statisitcal Base')
 MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning, var_name = 'Durationinmonth')
 ```
-
-<h2> <strong> Highlighted Features </strong></h2>
-
-**_User Preferences_**:
-
-The MOB algorithm offers two user preference settings (**`mergeMethod`** argument):
-
-1. `Size`: This setting allows you to optimize the sample size of each bin within specified maximum and minimum limits while ensuring that the minimum number of bins constraint is maintained.
-
-2. `Stats`: With this setting, the algorithm applies a stricter approach based on hypothesis testing results.<br>
-
-
 
 <div>
   <table >
