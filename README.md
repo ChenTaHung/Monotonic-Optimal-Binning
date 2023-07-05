@@ -1,6 +1,6 @@
 <h1><p align = 'center'><strong> Monotonic-Optimal-Binning </strong> </p></h1>
 
-**MOB** is a statistical approach to transform continuous variables into optimal and monotonic categorical variables. In this project, we have expanded the application to allow the user to choose to merge the bins based on `statistics` or `bin size`. This enhancement enables the user to achieve optimal results aligned with their expectations.<br>
+**MOB** is a statistical approach to transform continuous variables into optimal and monotonic categorical variables. In this project, we have expanded the application to allow the users to merge the bins based on `statistics` or `bin size`. This enhancement enables the users to achieve optimal results aligned with their expectations.<br>
 
 <h2><strong> Installation </strong></h2>
 
