@@ -1,6 +1,7 @@
 <h1><p align = 'center'><strong> Monotonic-Optimal-Binning </strong> </p></h1>
+<h3><p align = 'center'><strong> Python implementation (MOBPY) </strong> </p></h3>
 
-**MOB** is a statistical approach to transform continuous variables into optimal and monotonic categorical variables. In this project, we have expanded the application to allow the users to merge the bins based on `statistics` or `bin size`. This enhancement enables the users to achieve optimal results aligned with their expectations.<br>
+[**MOB**](https://pypi.org/project/MOBPY/) is a statistical approach to transform continuous variables into optimal and monotonic categorical variables. In this project, we have expanded the application to allow the users to merge the bins based on `statistics` or `bin size`. This is a Python-based project that enables the users to achieve monotone optimal binning results aligned with their expectations.<br>
 
 <h2><strong> Installation </strong></h2>
 
@@ -141,6 +142,7 @@ Language : Python 3.9.7
     - scipy 1.7.1
     - matplotlib 3.7.1
 ```
+
 
 <h2><strong> Reference </strong></h2>
 
