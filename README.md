@@ -87,6 +87,31 @@ print('Statisitcal Base')
 MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning, var_name = 'Durationinmonth')
 ```
 
+<div>
+  <table >
+    <thead>
+      <tr>
+        <th style="text-align: center;">SizeBinning</th>
+        <th style="text-align: center;">StatsBinning</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="text-align: center;">runMOB(mergeMethod='Size') (bins size base)</td>
+        <td style="text-align: center;">runMOB(mergeMethod='Stats') (statistical base)</td>
+      </tr>
+      <tr>
+        <td>
+            <img src="https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/charts/Creditamount-Size.png" width="400" height="400">
+        </td>
+        <td>
+           <img src="https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/charts/Creditamount-Stats.png" width="400" height="400">
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
 <div style="width: 100%;">
   <table style="width: 1200px;">
     <thead>
