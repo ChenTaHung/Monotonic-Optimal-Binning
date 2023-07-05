@@ -97,8 +97,8 @@ MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning, var_name = 'Durationinm
     </thead>
     <tbody>
       <tr>
-        <td style="text-align: center;">mergeMethod = 'Size' (bins size base)</td>
-        <td style="text-align: center;">mergeMethod = 'Stats' (statistical base)</td>
+        <td style="text-align: center;">runMOB(mergeMethod='Size') (bins size base)</td>
+        <td style="text-align: center;">runMOB(mergeMethod='Stats') (statistical base)</td>
       </tr>
     </tbody>
   </table>
