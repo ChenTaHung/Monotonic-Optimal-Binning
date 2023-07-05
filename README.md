@@ -88,7 +88,7 @@ MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning, var_name = 'Durationinm
 ```
 
 <div style="width: 100%;">
-  <table style="width: 100%;">
+  <table style="width: 950px;">
     <thead>
       <tr>
         <th style="text-align: center;">SizeBinning</th>
@@ -104,8 +104,8 @@ MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning, var_name = 'Durationinm
   </table>
 
   <div style="display: flex; justify-content: center;">
-    <img src="doc/charts/Creditamount-Size.png" alt="Image 1" style="width: 50%;" />
-    <img src="doc/charts/Creditamount-Stats.png" alt="Image 2" style="width: 50%;" />
+    <img src="doc/charts/Creditamount-Size.png" alt="Image 1" style="width: 450px;" />
+    <img src="doc/charts/Creditamount-Stats.png" alt="Image 2" style="width: 450px;" />
   </div>
 </div>
 <br>
