@@ -91,3 +91,8 @@ MOB_ALGO = MOB(data = df, var = 'Durationinmonth', response = 'default', exclude
 
 > The table that shows the binning result for the data that has precluded the missing values and exclude_values.
 
+<br><br>
+
+`↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓`
+
+[Jump Back to `MOBPY Documentation Index`](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/MOBPY-API-Ref.md)

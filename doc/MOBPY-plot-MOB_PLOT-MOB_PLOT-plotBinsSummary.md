@@ -1,6 +1,6 @@
 <h1><strong><p align = center> MOBPY Documentation </p></strong></h1>
 
-<h2><p  align=center><strong style = 'font-style:italic'>API Reference</strong></p></h2>
+<h2><p  align=center style = 'font-style:italic'><strong>API Reference</p></strong></p></h2>
 
 <h1><span style = 'font-size:smaller'> MOBPY.plot.MOB_PLOT.plotBinsSummary </span></h1>
 
@@ -87,3 +87,10 @@ MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning, var_name = 'Durationinmo
 ```
 
 <p align = 'center'><img src = 'https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/charts/Durationinmonth-Size.png' alt = 'Image' style = 'width: 1200px'/></p>
+
+
+<br><br>
+
+`↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓`
+
+[Jump Back to `MOBPY Documentation Index`](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/MOBPY-API-Ref.md)

@@ -65,3 +65,10 @@ MOB_ALGO.setBinningConstraints( max_bins = 6, min_bins = 3,
 [**`constraintsStatus`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L167)
 
 > The initial value of **`constraintsStatus`** is `False`. Once the user had run the method *`setBinningConstraints`()*, the value of the attribute will be set to `True` to prevent a Exception error while executing the [__*`runMOB`*__](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-MOB-MOB-runMOB.md) method.
+
+
+<br><br>
+
+`↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓`
+
+[Jump Back to `MOBPY Documentation Index`](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/MOBPY-API-Ref.md)
