@@ -11,7 +11,7 @@ python3 -m pip install MOBPY
 <h2><strong> Usage </strong></h2>
 
 
-<h3><span style = 'font-size:larger'> Example :</span></h3>
+**_Example_**:
 
 ```python
 import pandas as pd
@@ -43,7 +43,7 @@ if __name__ == '__main__' :
 
 The `runMOB` method will return a `pandas.DataFrame` which shows the binning result of the variable and also the WoE summary information for each bin. 
 
-<p align = 'center'><img src = 'https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/images/Durationinmonth%20bins%20summary.png' alt = 'Image' style = 'width: 1200px'/></p>
+<p align = 'center'><img src = 'https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/images/Durationinmonth%20bins%20summary.png' alt = 'Image' style = 'width: 1000px'/></p>
 
 And after we receive the binning result dataframe, we can plot it by using `MOBPY.plot.MOB_PLOT.plotBinsSummary` to visualize the binning summary result.
 
@@ -86,6 +86,18 @@ MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning, var_name = 'Durationinmo
 print('Statisitcal Base')
 MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning, var_name = 'Durationinmonth')
 ```
+
+<h2> <strong> Highlighted Features </strong></h2>
+
+**_User Preferences_**:
+
+The MOB algorithm offers two user preference settings (**`mergeMethod`** argument):
+
+1. `Size`: This setting allows you to optimize the sample size of each bin within specified maximum and minimum limits while ensuring that the minimum number of bins constraint is maintained.
+
+2. `Stats`: With this setting, the algorithm applies a stricter approach based on hypothesis testing results.<br>
+
+
 
 <div>
   <table >
@@ -134,7 +146,6 @@ Language : Python 3.9.7
 <h2><strong> Citation </strong></h2>
 
 - [Mironchyk, Pavel, and Viktor Tchistiakov. "Monotone optimal binning algorithm for credit risk modeling." Utr. Work. Pap (2017).](https://www.researchgate.net/profile/Viktor-Tchistiakov/publication/322520135_Monotone_optimal_binning_algorithm_for_credit_risk_modeling/links/5a5dd1a8458515c03edf9a97/Monotone-optimal-binning-algorithm-for-credit-risk-modeling.pdf)
-
 
 
 <h2><strong> Reference </strong></h2>
