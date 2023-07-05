@@ -43,7 +43,7 @@ if __name__ == '__main__' :
 
 The `runMOB` method will return a `pandas.DataFrame` which shows the binning result of the variable and also the WoE summary information for each bin. 
 
-<p align = 'center'><img src = 'https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/images/Durationinmonth%20bins%20summary.png' alt = 'Image' style = 'width: 1000px'/></p>
+<p align = 'center'><img src = 'https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/images/Durationinmonth%20bins%20summary.png' alt = 'Image' style = 'width: 800px'/></p>
 
 And after we receive the binning result dataframe, we can plot it by using `MOBPY.plot.MOB_PLOT.plotBinsSummary` to visualize the binning summary result.
 
