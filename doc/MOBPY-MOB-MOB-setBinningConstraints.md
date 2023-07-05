@@ -11,7 +11,7 @@ _`instance method`_ **MOB.`setBinningConstraints`(max_bins :int = 6, min_bins :i
 
 [**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L159-L167)
 
-**Parameters** : <br>
+### **Parameters** : <br>
 
 __*max_bins*__ : `int`, _defualt_ = `6`
 
@@ -41,7 +41,7 @@ __*maximize_bins*__ : `bool`, _defualt_ = `True`
 
 > A user preference to make the merging process in the algorithm stop earlier when it can remain an optimal binning results while maximizing the number of bins. Note that when [**`mergeMethod`**]() is set to `'Size'` may overwrite the constraints.
 
-**Returns**: `None`
+### **Returns**: `None`
 
 
 **Example** :

@@ -10,7 +10,7 @@ _`static method`_ **MOB_PLOT.`plotBinsSummary`(monoOptBinTable, var_name, bar_fi
 
 [**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/plot/MOB_PLOT.py#L7-L62)
 
-**Parameters** : <br>
+### **Parameters** : <br>
 
 **_monoOptBinTable_** : `pandas.DataFrame`
 
@@ -68,7 +68,7 @@ __*dpi*__: `int`, _default_ = `300`
 
 > Dpi controls the resolution of the exported chart if `figsavePath` is given a valid value. Higher the value of dpi, better the quality of the exported image gets.
 
-**Returns** : `None` but generate a `matplotlib.pyplot` chart.
+### **Returns** : `None` but generate a `matplotlib.pyplot` chart.
 
 **Example** :
 

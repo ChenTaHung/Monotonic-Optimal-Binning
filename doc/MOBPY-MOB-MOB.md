@@ -13,7 +13,7 @@
 
 [**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L6-L79)
 
-**Parameters** : <br>
+### **Parameters** : <br>
 
 **_data_** : `pandas.DataFrame`
 
@@ -33,7 +33,7 @@ __*exclude_value*__ : `int`, `float`, `list` or `None`, _default_ = `None`
 
 > The value that will be preclude before start discretize the `var` variable. It can either enter a integer, a float or specify a list contains the exclude values.
 
-**Returns** : `object class = MOBPY.MOB`
+### **Returns** : `object class = MOBPY.MOB`
 
 **Example** :
 

@@ -12,9 +12,11 @@
 
 [**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/plot/MOB_PLOT.py#L5)
 
-**Returns** : `None`
 
 **Notes**: The MOB_PLOT is built based on [**`matplotlib`**](https://matplotlib.org/) module.
+
+### **Returns** : `None`
+
 
 <h3><strong> Methods : </strong></h3>
 

@@ -10,7 +10,7 @@ _`instance method`_ **MOB.`runMOB`(mergeMethod, sign = 'auto')**
 
 [**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L182-L238)
 
-**Parameters** : <br>
+### **Parameters** : <br>
 
 **_mergeMethod_**: `str`, **{'Size', 'Stats'}**
 
@@ -21,7 +21,7 @@ _`instance method`_ **MOB.`runMOB`(mergeMethod, sign = 'auto')**
 
 > The sign specify the expectation of the correlation between `response` variable and the `var` variable. If set to `'+'`, then it means that the `response` variable and the `var` variable shows a positive correlation, and `'-'` for a negative correlation. If set to `'auto'` then the program will calculate the Pearson Correlation to decide the input value. See [**`response`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-MOB-MOB.md), [**`var`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-MOB-MOB.md) for more information.
 
-**Returns** : `pandas.DataFrame`
+### **Returns** : `pandas.DataFrame`
 
 > Returns the final optimal binning result dataframe. Shows the Bins Summary. For more detail, please see the [**`README.md`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/README.md) documentation.
 
@@ -50,5 +50,7 @@ SizeBinning = MOB_ALGO.runMOB(mergeMethod='Size')
 > The table that shows the binning result for the data that has precluded the missing values and exclude_values.
 
 <br><br>
+
+`↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓`
 
 [Jump Back to `MOBPY Documentation Index`](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/MOBPY-API-Ref.md)
