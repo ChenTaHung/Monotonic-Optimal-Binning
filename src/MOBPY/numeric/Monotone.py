@@ -1,5 +1,6 @@
 #%%
 import pandas as pd
+from typing import Union
 import os
 # os.chdir('/Users/chentahung/Desktop/git/mob-py/src/main/python')
 from MOBPY.numeric.MonotoneNode import MonotoneNode
@@ -26,23 +27,23 @@ class Monotone :
             
 
     @property
-    def data(self) :
+    def data(self) -> pd.DataFrame:
         return self._data
     
     @property
-    def var(self) :
+    def var(self) -> str :
         return self._var
     
     @property
-    def response(self) :
+    def response(self) -> str :
         return self._response
 
     @property
-    def metric(self) :
+    def metric(self) -> str :
         return self._metric
     
     @property
-    def exclude_value(self) :
+    def exclude_value(self) -> Union[list, int, float, None]:
         return self._exclude_value
     
     def __selectSign(self) -> str:
@@ -56,21 +57,15 @@ class Monotone :
         
         return sign
     
-    def __initMonoTable(self) :
+    def __initMonoTable(self) -> pd.DataFrame:
         '''
         initialize sorted table to check constraints or reverse trend on metric
         '''
         df = self.data.copy()
-        # count = Total
-        # sum = Bad
-        if df[self.var].isna().sum() == 0 and self.exclude_value == None : # no missing values and no exclude_value specified
-            return df.groupby(self.var)[self.response].agg(['count', 'sum', 'std']).reset_index().fillna(0)
-        elif df[self.var].isna().sum() != 0 and self.exclude_value == None :
-            return df[df[self.var].notnull()].groupby(self.var)[self.response].agg(['count', 'sum', 'std']).reset_index().fillna(0)
-        elif df[self.var].isna().sum() == 0 and self.exclude_value != None :
-            return df[df[self.var] != self.exclude_value].groupby(self.var)[self.response].agg(['count', 'sum', 'std']).reset_index().fillna(0)
-        
-    def tuneMonotone(self, initialization : bool = True, sign = 'auto'):
+
+        return df.groupby(self.var)[self.response].agg(['count', 'sum', 'std']).reset_index().fillna(0)
+    
+    def tuneMonotone(self, initialization : bool = True, sign = 'auto') -> pd.DataFrame:
         if sign == 'auto' :
             sign = self.__selectSign()
         else :
@@ -123,7 +118,7 @@ class Monotone :
                     cur = cur.pre
                 cur = cur.next
         else :
-            raise("Invalid sign : <string>  [auto|+|-]")
+            raise("Invalid sign : <string>  {auto,+,-}")
 
         # store result
         cur = root

@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from typing import Union
 from MOBPY.numeric.Monotone import Monotone
 from MOBPY.numeric.OptimalBinning import OptimalBinning
 
@@ -24,7 +25,7 @@ class MOB:
             _isNaExist = True
         else :
             _isNaExist = False
-        
+              
         # check exclude values exist
         if isinstance(exclude_value, list) :
             if self._data[self._var].isin(exclude_value).sum() > 0 : #contains exclude value
@@ -42,15 +43,15 @@ class MOB:
             _isExcValueExist = False
             
         
-        if _isNaExist & _isExcValueExist :
+        if _isNaExist & _isExcValueExist : #both contains missing and exclude values
             self._df_missing = self._data.loc[self._data[self._var].isna(), :]
             
-            if isinstance(self._exclude_value, list) :
+            if isinstance(exclude_value, list) :
                 self._df_excvalue = self._data.loc[self._data[self._var].isin(exclude_value), :]
+                self._df_sel = self._data.loc[(self._data[self._var].notnull()) & ~(self._data[self._var].isin(exclude_value))]
             elif isinstance(exclude_value, (float, int)) :
                 self._df_excvalue = self._data.loc[self._data[self._var] == exclude_value, :]
-                
-            self._df_sel = self._data.loc[(self._data[self._var].notnull()) & (self._data[self._var] != exclude_value)]
+                self._df_sel = self._data.loc[(self._data[self._var].notnull()) & (self._data[self._var] != exclude_value)]
             
         elif _isNaExist & ~_isExcValueExist: #only contain missing
             self._df_missing = self._data.loc[self._data[self._var].isna(), :]
@@ -59,10 +60,11 @@ class MOB:
         elif ~_isNaExist & _isExcValueExist : #only contain exclude condition
             if isinstance(exclude_value, list) :
                 self._df_excvalue = self._data.loc[self._data[self._var].isin(exclude_value), :]
+                self._df_sel = self._data.loc[~self._data[self._var].isin(exclude_value)]
             elif isinstance(exclude_value, (float, int)) :
                 self._df_excvalue = self._data.loc[self._data[self._var] == exclude_value, :]
-                
-            self._df_sel = self._data.loc[self._data[self._var] != exclude_value]
+                self._df_sel = self._data.loc[self._data[self._var] != exclude_value]
+        
         else:
             self._df_sel = self._data
             
@@ -79,81 +81,75 @@ class MOB:
         self._finishBinningTable = None
         
     @property
-    def data(self) :
+    def data(self) -> pd.DataFrame:
         return self._data
-    @data.setter
-    def data(self, value) :
-        self._data = value
     
     @property
-    def var(self):
+    def var(self) -> str :
         return self._var
         
     @property
-    def response(self):
+    def response(self) -> str:
         return self._response
     
     @property
-    def exclude_value(self):
+    def exclude_value(self) -> Union[list, int, float, None]:
         return self._exclude_value
 
     @property
-    def constraintsStatus(self):
+    def constraintsStatus(self) -> bool:
         return self._constraintsStatus
     
     @property
-    def isNaExist(self):
+    def isNaExist(self) -> bool:
         return self._isNaExist
     
     @property
-    def isExcValueExist(self) :
+    def isExcValueExist(self) -> bool:
         return self._isExcValueExist
     
     @property
-    def df_missing(self):
+    def df_missing(self) -> pd.DataFrame:
         return self._df_missing
     
     @property
-    def df_excvalue(self):
+    def df_excvalue(self) -> pd.DataFrame:
         return self._df_excvalue
     
     @property
-    def df_sel(self):
+    def df_sel(self) -> pd.DataFrame:
         return self._df_sel
     
     @property
-    def max_bins(self) :
+    def max_bins(self) -> int:
         return self._max_bins
-    # @max_bins.setter
-    # def max_bins(self, value):
-    #     self._max_bins = value
 
     @property
-    def min_bins(self):
+    def min_bins(self) -> int:
         return self._min_bins
         
     @property
-    def init_pvalue(self) :
+    def init_pvalue(self) -> float:
         return self._init_pvalue
         
     @property
-    def max_samples(self) :
+    def max_samples(self) -> Union[int, float]:
         return self._max_samples
 
     @property
-    def min_samples(self) :
+    def min_samples(self) -> Union[int, float] :
         return self._min_samples
     
     @property
-    def min_bads(self):
+    def min_bads(self) -> Union[int, float]:
         return self._min_bads
     
     @property
-    def maximize_bins(self) :
+    def maximize_bins(self) -> bool :
         return self._maximize_bins
     
     @property
-    def finishBinningTable(self) :
+    def finishBinningTable(self) -> pd.DataFrame :
         return self._finishBinningTable
     
     def setBinningConstraints(self, max_bins :int = 6, min_bins :int = 4, max_samples = 0.4, min_samples = 0.05, min_bads = 0.05, init_pvalue: float = 0.4, maximize_bins :bool = True) -> None:
@@ -166,7 +162,7 @@ class MOB:
         self._maximize_bins = maximize_bins
         self._constraintsStatus = True
            
-    def __summarizeBins(self, FinalOptTable):
+    def __summarizeBins(self, FinalOptTable) -> pd.DataFrame:
         
         FinalOptTable = FinalOptTable[['start', 'end', 'total', 'bads', 'mean']].rename(columns = {'total': 'nsamples', 'bad' : 'bads', 'mean' : 'bad_rate'})
         FinalOptTable['dist_obs'] = FinalOptTable['nsamples'] / FinalOptTable['nsamples'].sum()
@@ -174,12 +170,19 @@ class MOB:
         FinalOptTable['goods'] = FinalOptTable['nsamples'] - FinalOptTable['bads']
         FinalOptTable['dist_goods'] = FinalOptTable['goods'] / FinalOptTable['goods'].sum()
         FinalOptTable['woe'] = np.log(FinalOptTable['dist_goods']/FinalOptTable['dist_bads'])
-        FinalOptTable['iv_grp'] = (FinalOptTable['dist_goods'] - FinalOptTable['dist_bads']) * FinalOptTable['woe']
         
-        # TODO : Missing Data bads = 0 時候 woe 計算 (exc_value 同理） adjusted woe
+        # adjusted woe replacement when encounter zero bads or zero goods
+        if (FinalOptTable['bads'] == 0).sum() + (FinalOptTable['goods']).sum() > 0 :
+            adj_goods = FinalOptTable.loc[(FinalOptTable['bads'] == 0) | (FinalOptTable['goods'] == 0), 'goods'] + 0.5
+            adj_bads = FinalOptTable.loc[(FinalOptTable['bads'] == 0) | (FinalOptTable['goods'] == 0), 'bads'] + 0.5
+            adj_dist_goods = adj_goods / FinalOptTable['goods'].sum()
+            adj_dist_bads = adj_bads / FinalOptTable['bads'].sum()
+            FinalOptTable.loc[(FinalOptTable['bads'] == 0) | (FinalOptTable['goods'] == 0), 'woe'] = np.log(adj_dist_goods/adj_dist_bads)
+
+        FinalOptTable['iv_grp'] = (FinalOptTable['dist_goods'] - FinalOptTable['dist_bads']) * FinalOptTable['woe']
         return FinalOptTable      
       
-    def runMOB(self, mergeMethod, sign = 'auto') :
+    def runMOB(self, mergeMethod, sign = 'auto') -> pd.DataFrame :
         if self.constraintsStatus == False :
             raise Exception('Please set the constraints first by using "setBinningConstraints" method.')
         
@@ -208,7 +211,7 @@ class MOB:
                 'bads' : [self.df_missing[self.response].sum()],
                 'mean' : [(self.df_missing[self.response].sum()) / (len(self.df_missing))]})
                 
-            excludeValueDF = self.df_excvalue.groupby(self.var)[self.response].agg(['count', 'sum']).reset_index().fillna(0).rename({self.var: 'start','count':'total', 'sum':'bads'})
+            excludeValueDF = self.df_excvalue.groupby(self.var)[self.response].agg(['count', 'sum']).reset_index().fillna(0).rename(columns={self.var: 'start','count':'total', 'sum':'bads'})
             excludeValueDF['start'] = excludeValueDF['start'].astype(str)
             excludeValueDF.insert(1, 'end', excludeValueDF['start'])
             excludeValueDF['mean'] = excludeValueDF['bads'] / excludeValueDF['total']
@@ -224,7 +227,7 @@ class MOB:
             
             completeBinningTable = pd.concat([finishBinningTable, missingDF], axis = 0, ignore_index = True)
         elif ~self.isNaExist & self.isExcValueExist : # contains special values but no missing data
-            excludeValueDF = self.df_excvalue.groupby(self.var)[self.response].agg(['count', 'sum']).reset_index().fillna(0).rename({self.var: 'start','count':'total', 'sum':'bads'})
+            excludeValueDF = self.df_excvalue.groupby(self.var)[self.response].agg(['count', 'sum']).reset_index().fillna(0).rename(columns={self.var: 'start','count':'total', 'sum':'bads'})
             excludeValueDF['start'] = excludeValueDF['start'].astype(str)
             excludeValueDF.insert(1, 'end', excludeValueDF['start'])
             excludeValueDF['mean'] = excludeValueDF['bads'] / excludeValueDF['total']

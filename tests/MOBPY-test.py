@@ -1,13 +1,12 @@
 #%%
 import pandas as pd
-import matplotlib.pyplot as plt
 import os
-os.chdir('/***/***/***/***/***/***/***/mob-py/src/main/python')
+os.chdir('/Users/chentahung/Desktop/git/mob-py/src')
 from MOBPY.MOB import MOB
 from MOBPY.plot.MOB_PLOT import MOB_PLOT
 #%%
 if __name__ == '__main__' :
-    df = pd.read_csv('/***/***/***/***/***/***/***/git/mob-py/data/german_data_credit_cat.csv')
+    df = pd.read_csv('/Users/chentahung/Desktop/git/mob-py/data/german_data_credit_cat.csv')
     df['default'] = df['default'] - 1
     # A simple sample to generate the MOB result for numeric columns in the dataset.
     for x in df.columns[df.dtypes != 'object'] :
@@ -24,26 +23,20 @@ if __name__ == '__main__' :
             # mergeMethod = 'Size' means to run MOB algorithm under bins size base
             SizeBinning = MOB_ALGO.runMOB(mergeMethod='Size')
             print('Bins Size Base')
-            if x in ['Durationinmonth', 'Creditamount'] :
-                MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning, var_name = x, 
-                                         figsavePath = f'/***/***/***/***/***/***/***/git/mob-py/doc/charts/{x}-Size.png', dpi = 800)
-            else :
-                MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning, var_name = x)
+            MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning, var_name = x)
                 
             # mergeMethod = 'Stats' means to run MOB algorithm under statistical base
             StatsBinning = MOB_ALGO.runMOB(mergeMethod='Stats')
             print('Statisitcal Base')
-            if x == 'Creditamount' :
-                MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning, var_name = x, 
-                                         figsavePath = f'/Users/chentahung/Desktop/git/mob-py/doc/charts/{x}-Stats.png', dpi = 800)
-            else :
-                MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning, var_name = x)
+            MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning, var_name = x)
 
 
 # %%
 
 if __name__ == '__main__' :
-    MOB_ALGO = MOB(data = df, var = 'Durationinmonth', response = 'default', exclude_value = None) 
+    df = pd.read_csv('/Users/chentahung/Desktop/git/mob-py/data/german_data_credit_cat.csv')
+    df['default'] = df['default'] - 1
+    MOB_ALGO = MOB(data = df, var = 'Durationinmonth', response = 'default', exclude_value = [11,15]) 
     # Set Binning Constraints (Must-Do!)
     MOB_ALGO.setBinningConstraints( max_bins = 6, min_bins = 3, 
                                     max_samples = 0.4, min_samples = 0.05, 
@@ -52,8 +45,7 @@ if __name__ == '__main__' :
                                     maximize_bins=True)
     # mergeMethod = 'Size' means to run MOB algorithm under bins size base
     SizeBinning = MOB_ALGO.runMOB(mergeMethod='Size')
-    
-    StatsBinning = MOB_ALGO.runMOB(mergeMethod='Stats')
+    MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning, var_name = 'Durationinmonth')
     
 
 # %%

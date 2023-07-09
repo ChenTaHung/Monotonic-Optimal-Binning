@@ -6,3 +6,5 @@ scipy @ file:///opt/concourse/worker/volumes/live/8e481b15-67b8-4160-7a8b-26cd6e
 seaborn @ file:///tmp/build/80754af9/seaborn_1629307859561/work
 bokeh @ file:///opt/concourse/worker/volumes/live/278130e0-6bd5-4375-72c8-87158eba9408/volume/bokeh_1635324480391/work
 graphviz==0.19.1
+typing==3.7.4.3
+typing-extensions @ file:///tmp/build/80754af9/typing_extensions_1631814937681/work
