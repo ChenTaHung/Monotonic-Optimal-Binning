@@ -183,59 +183,63 @@ class MOB:
         return FinalOptTable      
       
     def runMOB(self, mergeMethod, sign = 'auto') -> pd.DataFrame :
-        if self.constraintsStatus == False :
-            raise Exception('Please set the constraints first by using "setBinningConstraints" method.')
-        
-        # Monotone
-        MonotoneTuner = Monotone(data = self.df_sel, var = self.var, response = self.response)
-        MonoTable = MonotoneTuner.tuneMonotone(sign = sign)
-        self.MonoTable = MonoTable
-        # Binning
-        OptimalBinningMerger = OptimalBinning(resMonotoneTable = MonoTable, 
-                                              max_bins = self.max_bins, min_bins = self.min_bins, 
-                                              max_samples = self.max_samples, min_samples = self.min_samples, 
-                                              min_bads = self.min_bads, init_pvalue = self.init_pvalue,
-                                              maximize_bins = self.maximize_bins)
-        
-        finishBinningTable = OptimalBinningMerger.monoOptBinning(mergeMethod = mergeMethod)
-        finishBinningTable['start'] = finishBinningTable['start'].astype(str)
-        finishBinningTable['end'] = finishBinningTable['end'].astype(str)
-        self._finishBinningTable = finishBinningTable
-        # Summary
-        if self.isNaExist and self.isExcValueExist : #contains missing and exclude value
+        if mergeMethod in ['Stats', 'Size'] :
+            if self.constraintsStatus == False :
+                raise Exception('Please set the constraints first by using "setBinningConstraints" method.')
             
-            missingDF = pd.DataFrame({
-                'start' : ['Missing'],
-                'end' : ['Missing'],
-                'total' : [len(self.df_missing)],
-                'bads' : [self.df_missing[self.response].sum()],
-                'mean' : [(self.df_missing[self.response].sum()) / (len(self.df_missing))]})
+            # Monotone
+            MonotoneTuner = Monotone(data = self.df_sel, var = self.var, response = self.response)
+            MonoTable = MonotoneTuner.tuneMonotone(sign = sign)
+            self.MonoTable = MonoTable
+            # Binning
+            OptimalBinningMerger = OptimalBinning(resMonotoneTable = MonoTable, 
+                                                max_bins = self.max_bins, min_bins = self.min_bins, 
+                                                max_samples = self.max_samples, min_samples = self.min_samples, 
+                                                min_bads = self.min_bads, init_pvalue = self.init_pvalue,
+                                                maximize_bins = self.maximize_bins)
+            
+            finishBinningTable = OptimalBinningMerger.monoOptBinning(mergeMethod = mergeMethod)
+            finishBinningTable['start'] = finishBinningTable['start'].astype(str)
+            finishBinningTable['end'] = finishBinningTable['end'].astype(str)
+            self._finishBinningTable = finishBinningTable
+            # Summary
+            if self.isNaExist and self.isExcValueExist : #contains missing and exclude value
                 
-            excludeValueDF = self.df_excvalue.groupby(self.var)[self.response].agg(['count', 'sum']).reset_index().fillna(0).rename(columns={self.var: 'start','count':'total', 'sum':'bads'})
-            excludeValueDF['start'] = excludeValueDF['start'].astype(str)
-            excludeValueDF.insert(1, 'end', excludeValueDF['start'])
-            excludeValueDF['mean'] = excludeValueDF['bads'] / excludeValueDF['total']
+                missingDF = pd.DataFrame({
+                    'start' : ['Missing'],
+                    'end' : ['Missing'],
+                    'total' : [len(self.df_missing)],
+                    'bads' : [self.df_missing[self.response].sum()],
+                    'mean' : [(self.df_missing[self.response].sum()) / (len(self.df_missing))]})
+                    
+                excludeValueDF = self.df_excvalue.groupby(self.var)[self.response].agg(['count', 'sum']).reset_index().fillna(0).rename(columns={self.var: 'start','count':'total', 'sum':'bads'})
+                excludeValueDF['start'] = excludeValueDF['start'].astype(str)
+                excludeValueDF.insert(1, 'end', excludeValueDF['start'])
+                excludeValueDF['mean'] = excludeValueDF['bads'] / excludeValueDF['total']
+                
+                completeBinningTable = pd.concat([finishBinningTable, missingDF, excludeValueDF], axis = 0, ignore_index = True)
+            elif self.isNaExist & ~self.isExcValueExist : # contains missing but no special values
+                missingDF = pd.DataFrame({
+                    'start' : ['Missing'],
+                    'end' : ['Missing'],
+                    'total' : [len(self.df_missing)],
+                    'bads' : [self.df_missing[self.response].sum()],
+                    'mean' : [(self.df_missing[self.response].sum()) / (len(self.df_missing))]})
+                
+                completeBinningTable = pd.concat([finishBinningTable, missingDF], axis = 0, ignore_index = True)
+            elif ~self.isNaExist & self.isExcValueExist : # contains special values but no missing data
+                excludeValueDF = self.df_excvalue.groupby(self.var)[self.response].agg(['count', 'sum']).reset_index().fillna(0).rename(columns={self.var: 'start','count':'total', 'sum':'bads'})
+                excludeValueDF['start'] = excludeValueDF['start'].astype(str)
+                excludeValueDF.insert(1, 'end', excludeValueDF['start'])
+                excludeValueDF['mean'] = excludeValueDF['bads'] / excludeValueDF['total']
+                
+                completeBinningTable = pd.concat([finishBinningTable, excludeValueDF], axis = 0, ignore_index = True)
+            else : # clean data with no missing and special values
+                completeBinningTable = finishBinningTable
+                
+            outputTable = self.__summarizeBins(FinalOptTable = completeBinningTable)
+        
+        elif mergeMethod == 'Pava' :
             
-            completeBinningTable = pd.concat([finishBinningTable, missingDF, excludeValueDF], axis = 0, ignore_index = True)
-        elif self.isNaExist & ~self.isExcValueExist : # contains missing but no special values
-            missingDF = pd.DataFrame({
-                'start' : ['Missing'],
-                'end' : ['Missing'],
-                'total' : [len(self.df_missing)],
-                'bads' : [self.df_missing[self.response].sum()],
-                'mean' : [(self.df_missing[self.response].sum()) / (len(self.df_missing))]})
-            
-            completeBinningTable = pd.concat([finishBinningTable, missingDF], axis = 0, ignore_index = True)
-        elif ~self.isNaExist & self.isExcValueExist : # contains special values but no missing data
-            excludeValueDF = self.df_excvalue.groupby(self.var)[self.response].agg(['count', 'sum']).reset_index().fillna(0).rename(columns={self.var: 'start','count':'total', 'sum':'bads'})
-            excludeValueDF['start'] = excludeValueDF['start'].astype(str)
-            excludeValueDF.insert(1, 'end', excludeValueDF['start'])
-            excludeValueDF['mean'] = excludeValueDF['bads'] / excludeValueDF['total']
-            
-            completeBinningTable = pd.concat([finishBinningTable, excludeValueDF], axis = 0, ignore_index = True)
-        else : # clean data with no missing and special values
-            completeBinningTable = finishBinningTable
-            
-        outputTable = self.__summarizeBins(FinalOptTable = completeBinningTable)
         
         return outputTable

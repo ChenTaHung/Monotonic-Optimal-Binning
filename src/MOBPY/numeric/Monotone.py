@@ -6,7 +6,7 @@ import os
 from MOBPY.numeric.MonotoneNode import MonotoneNode
 
 class Monotone :
-    def __init__(self, data, var, response, exclude_value = None, metric = 'mean') :
+    def __init__(self, data, var, response, metric = 'mean') :
         '''
         data : <pandas.DataFrame> 
         var : <string> column to generate WoE
@@ -23,7 +23,6 @@ class Monotone :
         self._var = var
         self._response = response
         self._metric = metric
-        self._exclude_value = exclude_value
             
 
     @property
@@ -41,10 +40,6 @@ class Monotone :
     @property
     def metric(self) -> str :
         return self._metric
-    
-    @property
-    def exclude_value(self) -> Union[list, int, float, None]:
-        return self._exclude_value
     
     def __selectSign(self) -> str:
         '''

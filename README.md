@@ -141,6 +141,7 @@ Language : Python 3.9.7
     - numpy 1.20.3
     - scipy 1.7.1
     - matplotlib 3.7.1
+    - typing==3.7.4.3
 ```
 
 

@@ -60,3 +60,34 @@ class MOB_PLOT :
             plt.savefig(figsavePath, dpi = dpi)
         # Show the plot
         plt.show()
+
+    @staticmethod
+    def plotPAVA_CSD(CSD_Summary) :
+        
+        plt.figure(figsize=(12,8))
+        var = CSD_Summary.columns[0]
+        response = CSD_Summary.iloc[:,1].name.split('_')[0]
+        metric = CSD_Summary.iloc[:,1].name.split('_')[1]
+        
+        # Line 1: x-axis is self.var, y-axis is self.metric, color is blue
+        plt.plot(CSD_Summary.iloc[:, 0], CSD_Summary.iloc[:,1], 'bo-', label='CSD')
+
+        # Line 2: x-axis is assignValue, y-axis is assignMetric, color is red
+        plt.plot(CSD_Summary.iloc[:, 2], CSD_Summary.iloc[:,3], 'ro-', label='GCM')
+
+        # Scatter plot for Line 1
+        plt.scatter(CSD_Summary.iloc[:, 0], CSD_Summary.iloc[:,1], color='blue')
+
+        # Scatter plot for Line 2
+        plt.scatter(CSD_Summary.iloc[:, 2], CSD_Summary.iloc[:,3], color='red')
+
+        # Set labels and title
+        plt.xlabel(var)
+        plt.ylabel(metric)
+        plt.title(f'Pool Adjacent Violators : <{var}, {response}> on "{metric}"')
+
+        # Add a legend
+        plt.legend(loc = 'best')
+
+        # Display the chart
+        plt.show()
