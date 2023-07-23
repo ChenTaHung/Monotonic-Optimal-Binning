@@ -25,7 +25,7 @@ class PAVA :
         self._metric = metric
         self._add_var_aggFunc = add_var_aggFunc
         self._exclude_value = exclude_value
-        self._orgData_assignment = None
+        self._orgData_Assignment = None
         self._CSD_Summary = None
         self._GCM_Summary = None
         self._PAV_Summary = None
@@ -107,7 +107,7 @@ class PAVA :
     
     @property
     def orgDataAssignment(self) -> Union[pd.DataFrame, None] :
-        return self._orgData_assignment
+        return self._orgData_Assignment
     
     @property
     def GCM_Summary(self) -> Union[pd.DataFrame, None] :
@@ -142,7 +142,7 @@ class PAVA :
         return self._isExcValueExist
         
     
-    def __summarize_GCM_CSD(self, GCM, CSD) :
+    def __summarize_GCM_CSD(self, GCM, CSD, MonoTable) :
         '''
         CSD: acceptable inputs : { mean | sum | std | var | min | max | range }
             self.var | count | sum | std | max | min
@@ -153,6 +153,7 @@ class PAVA :
             -----------------------------------------------------------
         '''
 
+        # Greatest Convex Minorant Summary -> create metric column.
         _GCM = GCM.copy()
         if self.metric == 'mean' :
             _GCM[self.metric] = _GCM['sum']/_GCM['count']
@@ -166,13 +167,22 @@ class PAVA :
         else :
             pass
         
+        # Cumulative Sum Diagram 
+        # Summation, std
+        # if self.metric == 'sum' :
+        #     _mono = MonoTable.copy()
+        #     _mono[f'{self.response}_cum{self.metric.capitalize()}'] = _mono.groupby('assignValue')[self.response].cumsum()
+        # elif self.metric == 'std' :
+        #     _mono = MonoTable.copy()
+        # else :
         _CSD = CSD.copy()
         _CSD['assignValue'] = _CSD.apply(lambda row: _GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (_GCM['intervalEnd'] >= row[self.var]), 'intervalEnd'].values[0], axis=1)
         _CSD['assignMetric'] = _CSD.apply(lambda row: _GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (_GCM['intervalEnd'] >= row[self.var]), self.metric].values[0], axis=1)
 
+        # remove duplicate age when PAVA rolled back to merge previous nodes
+        # _CSD = _CSD.sort_values(by = self.var).drop_duplicates(self.var, keep = 'last')
         
-        return _GCM[['intervalStart', 'intervalEnd', self.metric]], _CSD[[self.var,  f'{self.response}_cum{self.metric.capitalize()}', 'assignValue', 'assignMetric']]
-    
+        return _GCM[['intervalStart', 'intervalEnd', self.metric]], _CSD[[self.var,  f'{self.response}_cum{self.metric.capitalize()}', 'assignValue', 'assignMetric']]  
 
     def runPAVA(self, sign = 'auto') -> None:
         
@@ -185,24 +195,24 @@ class PAVA :
         # initialize the CSD (dataframe) and GCM (dataframe)
         # CSD is the initial groupby dataframe with stats information of response
         # GCM is the result the is tuned as monotonic on metric
-        _GCM, _CSD = _PAV.init_CSD_GCM(sign = sign)       
+        _GCM, _CSD, _MonoTable = _PAV.init_CSD_GCM(sign = sign)       
 
-        GCM, CSD = self.__summarize_GCM_CSD(GCM = _GCM, CSD = _CSD)
+        GCM, CSD = self.__summarize_GCM_CSD(GCM = _GCM, CSD = _CSD, MonoTable = _MonoTable)
         
         # select column to generate additional variable aggrgation (add_var_aggFunc)
         chosen_col_list = [self.var, self.response] + list(self.add_var_aggFunc.keys())
         
         orgDataAssignment = self.df_sel.copy()[chosen_col_list]
-        print(GCM)
-        print('===================')
-        print(CSD)
-        print('===================')
+        # print(GCM)
+        # print('===================')
+        # print(CSD)
+        # print('===================')
         orgDataAssignment['assignValue'] = orgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), 'intervalStart'].values[0], axis=1)
         orgDataAssignment['assignMetric'] = orgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), self.metric].values[0], axis=1)
-        print(orgDataAssignment)
-        print(orgDataAssignment.dtypes)
+        # print(orgDataAssignment)
+        # print(orgDataAssignment.dtypes)
         PAVA_Result_Df = orgDataAssignment.groupby('assignValue').agg(self.add_var_aggFunc).reset_index().fillna(0).sort_values(by='assignValue')
-        newColName = ['intervalStart']
+        newColName = [self.var]
         for var, stat in zip(self.add_var_aggFunc.keys(), self.add_var_aggFunc.values()) :
             if isinstance(stat, list) :
                 for singlestat in stat :
@@ -212,16 +222,20 @@ class PAVA :
         PAVA_Result_Df.columns = newColName
         
         #Generate final PAVA result (include additional var aggregation functions)
-        PAVA_Final_Df = GCM.sort_values(by = 'intervalStart').rename(columns = {self.metric : f'{self.response}_{self.metric}'})
-        PAVA_Result = PAVA_Final_Df.merge(PAVA_Result_Df, how = 'left', on = 'intervalStart')
-        PAVA_Result.iloc[0, 0] = -np.inf # continuous value range will have a -inf interval start at the smallest
-        PAVA_Result.iloc[-1, 1] = np.inf # continuous value range will have a inf interval end at the greatest
+        PAVA_Final_Df = GCM.sort_values(by = 'intervalStart').rename(columns = {'intervalStart':self.var, self.metric : f'{self.response}_{self.metric}'})
+        PAVA_Result = PAVA_Result_Df.merge(PAVA_Final_Df, how = 'left', on = self.var)
+        # create interval 
+        PAVA_Result.insert(1, column='intervalEnd)', value=PAVA_Result[self.var].shift(-1))
+        PAVA_Result.rename(columns = {self.var:'[intervalStart'}, inplace=True)
+        PAVA_Result.iloc[0, 0] = -np.inf
+        PAVA_Result.iloc[-1, 1] = np.inf
+        PAVA_Result = PAVA_Result.drop('intervalEnd', axis = 1)
         '''
         orgDataAssignment : original dataset but only select columns below 
         self.var | self.response | assignValue | assignMetric
         -----------------------------------------------------
         '''
-        self._orgData_assignment = orgDataAssignment
+        self._orgData_Assignment = orgDataAssignment
         '''
         CSDSummary : a groupby(var) dataset with selected metric column which represent the cumulative sum diagram of the chosen variable and response
         self.var | self.metric
@@ -230,19 +244,31 @@ class PAVA :
         self._CSD_Summary = CSD
         '''
         GCM : the result of the greatest convex minorant diagram that no data violates the convexity.
-        intervalStart | intervalEnd | mean
+        intervalStart | intervalEnd | self.metric
         ----------------------------------
         '''
         self._GCM_Summary = GCM
         '''
         PAVA_Result_Df: The result of PAVA contains additional variable statistics corresonding to the new given value of ɸ(x) to prevend convexity violation
-        intervalStart | intervalEnd | mean | <add_var1>_<var_stat1> | <add_var2>_<var_stat1> | <add_var3>_<var_stat1> | <add_var3>_<var_stat2> | ... 
+        intervalStart | intervalEnd | self.metric | <add_var1>_<var_stat1> | <add_var2>_<var_stat1> | <add_var3>_<var_stat1> | <add_var3>_<var_stat2> | ... 
         --------------------------------------------------------------------------------------------------------------------------------------------
         '''
         self._PAV_Summary = PAVA_Result
         # TODO : PAVA self.var -> interval  `[intervalStart, intervarStart(shift(-1)))`
 
-    # TODO
-    def applyPAVA(self) -> pd.DataFrame :
+    def applyPAVA(self, var_column: pd.Series, assign:str = 'interval') -> pd.Series :
+        '''
+        assignment: <str> {'interval'|'start'|'end'}
+        '''
+        if assign == 'interval' :
+            # include intervalStart but exclude intervalEnd :
+            PAVA_Res_Series = var_column.apply(lambda row : f'[ {self.PAV_Summary.loc[(self.PAV_Summary["[intervalStart"] <= row)&(self.PAV_Summary["intervalEnd)"] > row), "[intervalStart"].values[0]} , {self.PAV_Summary.loc[(self.PAV_Summary["[intervalStart"] <= row)&(self.PAV_Summary["intervalEnd)"] > row), "intervalEnd)"].values[0]} )')
+        elif assign == 'start' :
+            PAVA_Res_Series = var_column.apply(lambda row : self.PAV_Summary.loc[(self.PAV_Summary["[intervalStart"] <= row)&(self.PAV_Summary["intervalEnd)"] > row), "[intervalStart"].values[0])
+        elif assign == 'end' :
+            PAVA_Res_Series = var_column.apply(lambda row : self.PAV_Summary.loc[(self.PAV_Summary["[intervalStart"] <= row)&(self.PAV_Summary["intervalEnd)"] > row), "intervalEnd)"].values[0])
         
-        return None
+        return PAVA_Res_Series
+    
+    # #TODO : df['New_X'] = PAVA.applyPAVA(original_var = df['x'])
+    #             print(PAVA.PAV_Summary)

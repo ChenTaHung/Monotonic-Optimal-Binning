@@ -11,6 +11,7 @@ class MOB:
         self._response = response 
         self._exclude_value = exclude_value
         self._constraintsStatus = False
+        self._outputTable = None
         '''
         _isNaExist : check Missing Existance
         _isExcValueExist : check Exclude Value Existance
@@ -152,6 +153,10 @@ class MOB:
     def finishBinningTable(self) -> pd.DataFrame :
         return self._finishBinningTable
     
+    @property
+    def outputTable(self) -> pd.DataFrame :
+        return self._outputTable
+    
     def setBinningConstraints(self, max_bins :int = 6, min_bins :int = 4, max_samples = 0.4, min_samples = 0.05, min_bads = 0.05, init_pvalue: float = 0.4, maximize_bins :bool = True) -> None:
         self._max_bins = max_bins
         self._min_bins = min_bins
@@ -164,7 +169,8 @@ class MOB:
            
     def __summarizeBins(self, FinalOptTable) -> pd.DataFrame:
         
-        FinalOptTable = FinalOptTable[['start', 'end', 'total', 'bads', 'mean']].rename(columns = {'total': 'nsamples', 'bad' : 'bads', 'mean' : 'bad_rate'})
+        FinalOptTable = FinalOptTable[['[intervalStart', 'total', 'bads', 'mean']].rename(columns = {'total': 'nsamples', 'bad' : 'bads', 'mean' : 'bad_rate'})
+        FinalOptTable.insert(1, column = 'intervalEnd)', value = FinalOptTable['[intervalStart'].shift(-1))
         FinalOptTable['dist_obs'] = FinalOptTable['nsamples'] / FinalOptTable['nsamples'].sum()
         FinalOptTable['dist_bads'] = FinalOptTable['bads'] / FinalOptTable['bads'].sum()
         FinalOptTable['goods'] = FinalOptTable['nsamples'] - FinalOptTable['bads']
@@ -180,6 +186,10 @@ class MOB:
             FinalOptTable.loc[(FinalOptTable['bads'] == 0) | (FinalOptTable['goods'] == 0), 'woe'] = np.log(adj_dist_goods/adj_dist_bads)
 
         FinalOptTable['iv_grp'] = (FinalOptTable['dist_goods'] - FinalOptTable['dist_bads']) * FinalOptTable['woe']
+        # continous distribution means the value range from -inf to inf :
+        FinalOptTable.iloc[0,0] = -np.inf #first bin interval starts
+        FinalOptTable.iloc[-1,1] = np.inf #last bin interval ends
+        FinalOptTable.index.name = self.var
         return FinalOptTable      
       
     def runMOB(self, mergeMethod, sign = 'auto') -> pd.DataFrame :
@@ -199,38 +209,38 @@ class MOB:
                                                 maximize_bins = self.maximize_bins)
             
             finishBinningTable = OptimalBinningMerger.monoOptBinning(mergeMethod = mergeMethod)
-            finishBinningTable['start'] = finishBinningTable['start'].astype(str)
-            finishBinningTable['end'] = finishBinningTable['end'].astype(str)
-            self._finishBinningTable = finishBinningTable
+            finishBinningTable['[intervalStart'] = finishBinningTable['[intervalStart'].astype(str)
+            finishBinningTable['intervalEnd)'] = finishBinningTable['intervalEnd)'].astype(str)
+            self._finishBinningTable = finishBinningTable.rename(columns = {'intervalEnd)':'intervalEnd]'})
             # Summary
             if self.isNaExist and self.isExcValueExist : #contains missing and exclude value
                 
                 missingDF = pd.DataFrame({
-                    'start' : ['Missing'],
-                    'end' : ['Missing'],
+                    '[intervalStart' : ['Missing'],
+                    'intervalEnd)' : ['Missing'],
                     'total' : [len(self.df_missing)],
                     'bads' : [self.df_missing[self.response].sum()],
                     'mean' : [(self.df_missing[self.response].sum()) / (len(self.df_missing))]})
                     
-                excludeValueDF = self.df_excvalue.groupby(self.var)[self.response].agg(['count', 'sum']).reset_index().fillna(0).rename(columns={self.var: 'start','count':'total', 'sum':'bads'})
-                excludeValueDF['start'] = excludeValueDF['start'].astype(str)
-                excludeValueDF.insert(1, 'end', excludeValueDF['start'])
+                excludeValueDF = self.df_excvalue.groupby(self.var)[self.response].agg(['count', 'sum']).reset_index().fillna(0).rename(columns={self.var: '[intervalStart','count':'total', 'sum':'bads'})
+                excludeValueDF['[intervalStart'] = excludeValueDF['[intervalStart'].astype(str)
+                excludeValueDF.insert(1, 'intervalEnd)', excludeValueDF['[intervalStart'])
                 excludeValueDF['mean'] = excludeValueDF['bads'] / excludeValueDF['total']
                 
                 completeBinningTable = pd.concat([finishBinningTable, missingDF, excludeValueDF], axis = 0, ignore_index = True)
             elif self.isNaExist & ~self.isExcValueExist : # contains missing but no special values
                 missingDF = pd.DataFrame({
-                    'start' : ['Missing'],
-                    'end' : ['Missing'],
+                    '[intervalStart' : ['Missing'],
+                    'intervalEnd)' : ['Missing'],
                     'total' : [len(self.df_missing)],
                     'bads' : [self.df_missing[self.response].sum()],
                     'mean' : [(self.df_missing[self.response].sum()) / (len(self.df_missing))]})
                 
                 completeBinningTable = pd.concat([finishBinningTable, missingDF], axis = 0, ignore_index = True)
             elif ~self.isNaExist & self.isExcValueExist : # contains special values but no missing data
-                excludeValueDF = self.df_excvalue.groupby(self.var)[self.response].agg(['count', 'sum']).reset_index().fillna(0).rename(columns={self.var: 'start','count':'total', 'sum':'bads'})
-                excludeValueDF['start'] = excludeValueDF['start'].astype(str)
-                excludeValueDF.insert(1, 'end', excludeValueDF['start'])
+                excludeValueDF = self.df_excvalue.groupby(self.var)[self.response].agg(['count', 'sum']).reset_index().fillna(0).rename(columns={self.var: '[intervalStart','count':'total', 'sum':'bads'})
+                excludeValueDF['[intervalStart'] = excludeValueDF['[intervalStart'].astype(str)
+                excludeValueDF.insert(1, 'intervalEnd', excludeValueDF['[intervalStart'])
                 excludeValueDF['mean'] = excludeValueDF['bads'] / excludeValueDF['total']
                 
                 completeBinningTable = pd.concat([finishBinningTable, excludeValueDF], axis = 0, ignore_index = True)
@@ -238,8 +248,22 @@ class MOB:
                 completeBinningTable = finishBinningTable
                 
             outputTable = self.__summarizeBins(FinalOptTable = completeBinningTable)
-        
-        elif mergeMethod == 'Pava' :
-            
-        
+            self._outputTable = outputTable
+        else :
+            raise ValueError('mergeMethod only supports {<Stats> | <Size>} so far.')
+                
         return outputTable
+
+    def applyMOB(self, var_column : pd.Series, assign :str = 'interval') :
+        '''
+        assignment: <str> {'interval'|'start'|'end'}
+        '''        
+        if assign == 'interval' :
+            # include intervalStart but exclude intervalEnd :
+            MOB_Res_Series = var_column.apply(lambda row : f'[ {self.outputTable.loc[(self.outputTable["[intervalStart"] <= row)&(self.outputTable["intervalEnd)"] > row), "[intervalStart"].values[0]} , {self.outputTable.loc[(self.PAV_Summary["[intervalStart"] <= row)&(self.outputTable["intervalEnd)"] > row), "intervalEnd)"].values[0]} )')
+        elif assign == 'start' :
+            MOB_Res_Series = var_column.apply(lambda row : self.outputTable.loc[(self.outputTable["[intervalStart"] <= row)&(self.outputTable["intervalEnd)"] > row), "[intervalStart"].values[0])
+        elif assign == 'end' :
+            MOB_Res_Series = var_column.apply(lambda row : self.outputTable.loc[(self.outputTable["[intervalStart"] <= row)&(self.outputTable["intervalEnd)"] > row), "intervalEnd)"].values[0])
+        
+        return MOB_Res_Series

@@ -51,8 +51,10 @@ class PAV :
         '''
         decide `sign` argument
         '''
+        if self.metric == 'count' :
+            pearson_corr = MonoTable[self.var].corr(MonoTable['count'])
         
-        if self.metric == 'mean' :
+        elif self.metric == 'mean' :
             pearson_corr = MonoTable[self.var].corr(MonoTable['sum'] / MonoTable['count'])
         
         elif self.metric == 'sum' :
@@ -123,9 +125,7 @@ class PAV :
                 
             while cur is not None : #not the last node
                 while cur.pre is not None :
-                    # print("cur.pre is not None")
                     if cur.stats <= cur.pre.stats: # not the first one and strictedly and ascendingly monotonic
-                        # print("cur.stats <= cur.pre.stats")
                         cur.pre.update(nextValue = cur.endValue, nextCount = cur.count, nextSum = cur.sum, nextStd = cur.std, nextMax = cur.max, nextMin = cur.min) # TODO
                         CSD.append(tuple([cur.pre.endValue] + list(cur.pre.stats_array) + [cur.pre.stats]))
                         cur.pre.next = cur.next
@@ -133,7 +133,7 @@ class PAV :
                             cur.next.pre = cur.pre
                         cur = cur.pre
                     else :
-                        CSD.append(tuple([cur.endValue] + list(cur.stats_array) + [cur.stats]))
+                        CSD.append(tuple([cur.startValue] + list(cur.stats_array) + [cur.stats]))
                         break
                     
                 cur = cur.next
@@ -144,17 +144,16 @@ class PAV :
                 
             while cur is not None : #not the last node
                 while cur.pre is not None :
-                    # print("cur.pre is not None")
                     if cur.stats >= cur.pre.stats: # not the first one and strictedly and descendingly monotonic
-                        # print("cur.stats >= cur.pre.stats")
                         cur.pre.update(nextValue = cur.endValue, nextCount = cur.count, nextSum = cur.sum, nextStd = cur.std, nextMax = cur.max, nextMin = cur.min) # TODO
                         CSD.append(tuple([cur.pre.endValue] + list(cur.pre.stats_array) + [cur.pre.stats]))
+                        
                         cur.pre.next = cur.next
                         if cur.next is not None:
                             cur.next.pre = cur.pre
                         cur = cur.pre
                     else :
-                        CSD.append(tuple([cur.endValue] + list(cur.stats_array) + [cur.stats]))
+                        CSD.append(tuple([cur.startValue] + list(cur.stats_array) + [cur.stats]))
                         break
                     
                 cur = cur.next
@@ -189,7 +188,7 @@ class PAV :
         
         return resDF, csdDF
 
-    def init_CSD_GCM(self, sign = 'auto') :
+    def init_CSD_GCM(self, sign = 'auto') -> Union[tuple, pd.DataFrame]:
         
         # initialize Cumulative Sum Diagram (CSD)
         MonoTable = self.__initMonoTable()   
@@ -202,7 +201,7 @@ class PAV :
         # initialize Greatest Convex Minorant (GCM)
         GCM, CSD = self.__initGCM(MonoTable = MonoTable, sign = sign)
         
-        return GCM, CSD
+        return GCM, CSD, MonoTable
 
 # =========================================================================
 # =========================================================================

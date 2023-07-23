@@ -5,17 +5,18 @@ import numpy as np
 class MOB_PLOT :
         
     @staticmethod
-    def plotBinsSummary(monoOptBinTable, var_name, bar_fill = 'skyblue', bar_alpha = 0.5, bar_width = 0.5, bar_text_color = 'darkblue', 
+    def plotBinsSummary(monoOptBinTable, bar_fill = 'skyblue', bar_alpha = 0.5, bar_width = 0.5, bar_text_color = 'darkblue', 
                         line_color = 'orange', line_width = 3, dot_color = 'red', dot_size = 80, annotation_font_weight = 'bold', 
                         figsavePath: str = None , dpi:int = 300):
         
         fig, ax1 = plt.subplots(1,1,figsize = (12,8))
         binSummaryTable = monoOptBinTable.copy()
-        binSummaryTable['end'] = pd.Categorical(binSummaryTable['end'])
-
+        var_name = binSummaryTable.index.name        
+        binSummaryTable['interval'] = '[' + binSummaryTable['[intervalStart'].astype(str) + ' , ' + binSummaryTable['intervalEnd)'].astype(str) + ')'
+        
         # Plot bar chart for 'dist_obs'
-        bars = ax1.bar(np.arange(len(binSummaryTable['end'])), binSummaryTable['woe'], color = bar_fill, alpha = bar_alpha, width = bar_width)
-        ax1.set_xticks(ticks = np.arange(len(binSummaryTable['end'])), labels = binSummaryTable['end'])
+        bars = ax1.bar(np.arange(len(binSummaryTable['interval'])), binSummaryTable['woe'], color = bar_fill, alpha = bar_alpha, width = bar_width)
+        ax1.set_xticks(ticks = np.arange(len(binSummaryTable['interval'])), labels = binSummaryTable['interval'])
         ax1.axhline(0)
         ax1.set_xlabel('Interval End Value')
         ax1.set_ylabel('WoE', color = bar_text_color)
@@ -32,9 +33,9 @@ class MOB_PLOT :
         ax2 = ax1.twinx()
 
         # Plot line chart for 'bad_rate'
-        ax2.plot(np.arange(len(binSummaryTable['end'])), binSummaryTable['bad_rate'], color=line_color, label='Bad Rate', linewidth = line_width)
-        ax2.scatter(np.arange(len(binSummaryTable['end'])), binSummaryTable['bad_rate'], color=dot_color, s = dot_size)
-        ax2.set_xticks(ticks = np.arange(len(binSummaryTable['end'])), labels = binSummaryTable['end'])
+        ax2.plot(np.arange(len(binSummaryTable['interval'])), binSummaryTable['bad_rate'], color=line_color, label='Bad Rate', linewidth = line_width)
+        ax2.scatter(np.arange(len(binSummaryTable['interval'])), binSummaryTable['bad_rate'], color=dot_color, s = dot_size)
+        ax2.set_xticks(ticks = np.arange(len(binSummaryTable['interval'])), labels = binSummaryTable['interval'])
         ax2.set_ylabel('Bad Rate', color=dot_color)
         
         # Add text
@@ -68,18 +69,19 @@ class MOB_PLOT :
         var = CSD_Summary.columns[0]
         response = CSD_Summary.iloc[:,1].name.split('_')[0]
         metric = CSD_Summary.iloc[:,1].name.split('_')[1]
+        _CSD = CSD_Summary.copy()
         
         # Line 1: x-axis is self.var, y-axis is self.metric, color is blue
-        plt.plot(CSD_Summary.iloc[:, 0], CSD_Summary.iloc[:,1], 'bo-', label='CSD')
+        plt.plot(_CSD.iloc[:, 0], _CSD.iloc[:,1], 'bo-', label='CSD')
 
         # Line 2: x-axis is assignValue, y-axis is assignMetric, color is red
-        plt.plot(CSD_Summary.iloc[:, 2], CSD_Summary.iloc[:,3], 'ro-', label='GCM')
+        plt.plot(_CSD.iloc[:, 2], _CSD.iloc[:,3], 'ro-', label='GCM')
 
         # Scatter plot for Line 1
-        plt.scatter(CSD_Summary.iloc[:, 0], CSD_Summary.iloc[:,1], color='blue')
+        plt.scatter(_CSD.iloc[:, 0], _CSD.iloc[:,1], color='blue')
 
         # Scatter plot for Line 2
-        plt.scatter(CSD_Summary.iloc[:, 2], CSD_Summary.iloc[:,3], color='red')
+        plt.scatter(_CSD.iloc[:, 2], _CSD.iloc[:,3], color='red')
 
         # Set labels and title
         plt.xlabel(var)

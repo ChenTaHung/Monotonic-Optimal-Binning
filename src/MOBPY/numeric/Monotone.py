@@ -132,7 +132,7 @@ class Monotone :
             meanList.append(cur.mean)
             cur = cur.next
         
-        resDF = pd.DataFrame({'start':startValueList, 'end': endValueList, 'total': binTotalList, 'bads': binBadList, 'mean': meanList, 'std': stdList})
+        resDF = pd.DataFrame({'[intervalStart':startValueList, 'intervalEnd)': endValueList, 'total': binTotalList, 'bads': binBadList, 'mean': meanList, 'std': stdList})
         return resDF
     
 # %%

@@ -134,16 +134,16 @@ class OptimalBinning :
         return p_value_list
 
     def __mergeBinsOnce(self, optTable, mergeResult, mergeIndex) :
-        newStart = optTable.loc[mergeIndex, 'start']
-        newEnd   = optTable.loc[mergeIndex + 1, 'end']
+        newStart = optTable.loc[mergeIndex, '[intervalStart']
+        newEnd   = optTable.loc[mergeIndex + 1, 'intervalEnd)']
         
         newTotal = mergeResult[mergeIndex, 1]
         newMean  = mergeResult[mergeIndex, 2]
         newBads  = newTotal * newMean
         newStd   = mergeResult[mergeIndex, 3]
         
-        mergeDataFrame = pd.DataFrame({'start' : [newStart],
-                                       'end'   : [newEnd],
+        mergeDataFrame = pd.DataFrame({'[intervalStart' : [newStart],
+                                       'intervalEnd)'   : [newEnd],
                                        'total' : [newTotal],
                                        'bads'  : [newBads],
                                        'mean'  : [newMean],
@@ -272,7 +272,7 @@ class OptimalBinning :
         else :
             raise('Wrong Merging Method : <Stats> / <Size> / <Chi>')
 
-        return completedTable[['start', 'end', 'total', 'bads', 'mean']]
+        return completedTable[['[intervalStart', 'intervalEnd)', 'total', 'bads', 'mean']]
     
 #%%
 

@@ -54,9 +54,12 @@ class PavMonoNode:
     @property
     def stats(self) -> Union[float, int]:
         '''
-        acceptable inputs : { mean | sum | std | var | min | max | range }
+        acceptable inputs : { count | mean | sum | std | var | min | max | range }
         '''
-        if self.metric == 'mean' :
+        if self.metric == 'count' :
+            return self.count
+        
+        elif self.metric == 'mean' :
             return self.sum / self.count
         
         elif self.metric == 'sum' :

@@ -23,12 +23,12 @@ if __name__ == '__main__' :
             # mergeMethod = 'Size' means to run MOB algorithm under bins size base
             SizeBinning = MOB_ALGO.runMOB(mergeMethod='Size')
             print('Bins Size Base')
-            MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning, var_name = x)
+            MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning)
                 
             # mergeMethod = 'Stats' means to run MOB algorithm under statistical base
             StatsBinning = MOB_ALGO.runMOB(mergeMethod='Stats')
             print('Statisitcal Base')
-            MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning, var_name = x)
+            MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning)
 
 
 # %%
