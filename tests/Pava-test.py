@@ -1,5 +1,6 @@
 #%%
 import pandas as pd
+import numpy as np
 import os
 os.chdir('/Users/chentahung/Desktop/git/mob-py/src')
 from MOBPY.PAVA import PAVA
@@ -9,18 +10,18 @@ df = pd.read_csv('/Users/chentahung/Desktop/git/mob-py/data/insurance2.csv')
 
 
 #%%
-P = PAVA(data = df, var = 'age', response = 'charges', metric='range', 
-         add_var_aggFunc={'bmi':'mean', 'smoker':'sum', 'region':['max', 'min']})
-P.runPAVA(sign = 'auto')
+# {'bmi':'mean', 'smoker':'sum', 'region':['max', 'min'], 'charges' : np.ptp}
+P = PAVA(data = df, var = 'age', response = 'insuranceclaim', metric='mean', 
+         add_var_aggFunc = {'bmi':'mean', 'smoker':'sum', 'region':['max', 'min'], 'charges' : np.ptp})
+P.runPAVA(sign = '+')
 # %%
-# print(P.orgDataAssignment)
-# print(P.CSD_Summary)
+# print(P.OrgDataAssignment)
+print(P.CSD_Summary)
 # print(P.GCM_Summary)
 print(P.PAV_Summary)
 # %%
-MOB_PLOT.plotPAVA_CSD(CSD_Summary = P.CSD_Summary)
-# %%
-MOB_PLOT.plotPAVA_CSD(CSD_Summary = P.CSD_Summary.drop_duplicates('age', keep = 'last'))
+MOB_PLOT.plotPAVACsd(CSD_Summary = P.CSD_Summary)
+
 # %%
 _res = P.applyPAVA(df['age'], 'interval')
 # %%

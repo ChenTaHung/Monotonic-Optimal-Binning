@@ -40,7 +40,7 @@ MOB_ALGO.setBinningConstraints( max_bins = 6, min_bins = 3,
 SizeBinning = MOB_ALGO.runMOB(mergeMethod='Size')
 ```
 
-<p align = 'center'><img src = 'https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/images/Durationinmonth%20bins%20summary.png' alt = 'Image' style = 'width: 1000px'/></p>
+<p align = 'center'><img src = 'https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/images/Durationinmonth-bins-summary.png' alt = 'Image' style = 'width: 1000px'/></p>
 
 
 <h3><strong> Attributes : </strong></h3>

@@ -22,13 +22,24 @@ if __name__ == '__main__' :
             print(f' ===================== {x} =====================')
             # mergeMethod = 'Size' means to run MOB algorithm under bins size base
             SizeBinning = MOB_ALGO.runMOB(mergeMethod='Size')
-            print('Bins Size Base')
-            MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning)
                 
             # mergeMethod = 'Stats' means to run MOB algorithm under statistical base
+
             StatsBinning = MOB_ALGO.runMOB(mergeMethod='Stats')
-            print('Statisitcal Base')
-            MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning)
+            
+            if x == 'Durationinmonth' :
+                SizeBinning
+                MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning, figsavePath='/Users/chentahung/Desktop/git/mob-py/doc/charts/Durationinmonth-Size.png', dpi = 1200)
+            elif x == 'Creditamount' :
+                MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning, figsavePath='/Users/chentahung/Desktop/git/mob-py/doc/charts/Creditamount-Size.png', dpi = 1200)
+                MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning, figsavePath='/Users/chentahung/Desktop/git/mob-py/doc/charts/Creditamount-Stats.png', dpi = 1200)
+            else :
+                MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning)
+
+            # print('Bins Size Base')
+            # MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning)
+            # print('Statisitcal Base')
+            # MOB_PLOT.plotBinsSummary(monoOptBinTable = StatsBinning)
 
 
 # %%
@@ -36,7 +47,7 @@ if __name__ == '__main__' :
 if __name__ == '__main__' :
     df = pd.read_csv('/Users/chentahung/Desktop/git/mob-py/data/german_data_credit_cat.csv')
     df['default'] = df['default'] - 1
-    MOB_ALGO = MOB(data = df, var = 'Durationinmonth', response = 'default', exclude_value = [11,15]) 
+    MOB_ALGO = MOB(data = df, var = 'Durationinmonth', response = 'default', exclude_value = None) 
     # Set Binning Constraints (Must-Do!)
     MOB_ALGO.setBinningConstraints( max_bins = 6, min_bins = 3, 
                                     max_samples = 0.4, min_samples = 0.05, 
@@ -45,8 +56,8 @@ if __name__ == '__main__' :
                                     maximize_bins=True)
     # mergeMethod = 'Size' means to run MOB algorithm under bins size base
     SizeBinning = MOB_ALGO.runMOB(mergeMethod='Size')
-    MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning, var_name = 'Durationinmonth')
-    
+    MOB_PLOT.plotBinsSummary(monoOptBinTable = SizeBinning)
+    MOB_ALGO.applyMOB(df['Durationinmonth'])
 
 # %%
 

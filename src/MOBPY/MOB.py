@@ -248,6 +248,7 @@ class MOB:
                 completeBinningTable = finishBinningTable
                 
             outputTable = self.__summarizeBins(FinalOptTable = completeBinningTable)
+            # intervalStart and intervalEnd is set as string due to the concatenation of missing and exclusive dataset
             self._outputTable = outputTable
         else :
             raise ValueError('mergeMethod only supports {<Stats> | <Size>} so far.')
@@ -257,13 +258,16 @@ class MOB:
     def applyMOB(self, var_column : pd.Series, assign :str = 'interval') :
         '''
         assignment: <str> {'interval'|'start'|'end'}
-        '''        
+        '''
+        _MOBout = self.outputTable
+        _MOBout['[intervalStart'] = _MOBout['[intervalStart'].astype(float)
+        _MOBout['intervalEnd)'] = _MOBout['intervalEnd)'].astype(float)
         if assign == 'interval' :
             # include intervalStart but exclude intervalEnd :
-            MOB_Res_Series = var_column.apply(lambda row : f'[ {self.outputTable.loc[(self.outputTable["[intervalStart"] <= row)&(self.outputTable["intervalEnd)"] > row), "[intervalStart"].values[0]} , {self.outputTable.loc[(self.PAV_Summary["[intervalStart"] <= row)&(self.outputTable["intervalEnd)"] > row), "intervalEnd)"].values[0]} )')
+            MOB_Res_Series = var_column.apply(lambda row : f'[ {_MOBout.loc[(_MOBout["[intervalStart"] <= row)&(_MOBout["intervalEnd)"] > row), "[intervalStart"].values[0]} , {_MOBout.loc[(_MOBout["[intervalStart"] <= row)&(_MOBout["intervalEnd)"] > row), "intervalEnd)"].values[0]} )')
         elif assign == 'start' :
-            MOB_Res_Series = var_column.apply(lambda row : self.outputTable.loc[(self.outputTable["[intervalStart"] <= row)&(self.outputTable["intervalEnd)"] > row), "[intervalStart"].values[0])
+            MOB_Res_Series = var_column.apply(lambda row : _MOBout.loc[(_MOBout["[intervalStart"] <= row)&(_MOBout["intervalEnd)"] > row), "[intervalStart"].values[0])
         elif assign == 'end' :
-            MOB_Res_Series = var_column.apply(lambda row : self.outputTable.loc[(self.outputTable["[intervalStart"] <= row)&(self.outputTable["intervalEnd)"] > row), "intervalEnd)"].values[0])
+            MOB_Res_Series = var_column.apply(lambda row : _MOBout.loc[(_MOBout["[intervalStart"] <= row)&(_MOBout["intervalEnd)"] > row), "intervalEnd)"].values[0])
         
         return MOB_Res_Series

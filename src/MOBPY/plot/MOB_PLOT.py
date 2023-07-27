@@ -40,7 +40,7 @@ class MOB_PLOT :
         
         # Add text
         med = binSummaryTable['bad_rate'].median()
-        if binSummaryTable.iloc[-1, 4] - binSummaryTable.iloc[0, 4] > 0 :
+        if binSummaryTable.iloc[-1, 4] - binSummaryTable.iloc[0, 4] > 0 : # bar_rate
             for i, val in enumerate(binSummaryTable['bad_rate']):
                 if val <= med :
                     ax2.annotate(f'{val:.1%}', xy=(i, val), xytext=(0, -7.5), textcoords='offset points', ha='left', va='top', weight = annotation_font_weight, c = dot_color)
@@ -58,38 +58,63 @@ class MOB_PLOT :
         plt.title(f'Bins Summary Plot - {var_name} \n IV : {(binSummaryTable["iv_grp"].sum()):.4f}')
 
         if figsavePath != None :
+            fig.patch.set_facecolor('white')
             plt.savefig(figsavePath, dpi = dpi)
         # Show the plot
         plt.show()
 
     @staticmethod
-    def plotPAVA_CSD(CSD_Summary) :
+    def plotPAVACsd(CSD_Summary, figsavePath: str = None , dpi:int = 300) :
         
-        plt.figure(figsize=(12,8))
+        fig = plt.figure(figsize=(12,8))
+        ax = fig.add_subplot(111)
         var = CSD_Summary.columns[0]
         response = CSD_Summary.iloc[:,1].name.split('_')[0]
         metric = CSD_Summary.iloc[:,1].name.split('_')[1]
-        _CSD = CSD_Summary.copy()
         
-        # Line 1: x-axis is self.var, y-axis is self.metric, color is blue
-        plt.plot(_CSD.iloc[:, 0], _CSD.iloc[:,1], 'bo-', label='CSD')
+        _GCM = CSD_Summary[['intervalStart', 'intervalEnd', 'assignMetric']].drop_duplicates(['intervalStart', 'intervalEnd', 'assignMetric'])
+        _GCM['[intervalStart'] = _GCM['intervalStart'].astype(str)
+        _GCM['intervalEnd)'] = _GCM['intervalStart'].shift(-1).astype(str)
+        _GCM.iloc[0,3] = str(np.inf)
+        _GCM.iloc[-1,4] = str(-np.inf)
+        _GCM['interval'] = '[' + _GCM['[intervalStart'] + ',' + _GCM['intervalEnd)'] + ')'
+        '''
+        GCM
+        intervalStart | intervalEnd | assignMetric | [intervalStart | intervalEnd) | interval
+        -------------------------------------------------------------------------------------
+        '''
+        
+        _CSD = CSD_Summary.drop_duplicates(var, keep = 'last')
+        # _GCM['interval'] = 
+        # Stats of PavmonoNode to plot CSD [self.var]
+        ax.plot(_CSD.iloc[:, 0], _CSD.iloc[:,1], 'bo-', label='CSD')
 
-        # Line 2: x-axis is assignValue, y-axis is assignMetric, color is red
-        plt.plot(_CSD.iloc[:, 2], _CSD.iloc[:,3], 'ro-', label='GCM')
+        # PAVA result and assignment to to plot GCM ['assignValue']
+        # intervalStart | intervalEnd | assignMetric
+        ax.plot(_GCM.iloc[:, 1], _GCM.iloc[:,2], 'ro-', label='GCM')
 
-        # Scatter plot for Line 1
-        plt.scatter(_CSD.iloc[:, 0], _CSD.iloc[:,1], color='blue')
+        # Scatter plot for CSD
+        ax.scatter(_CSD.iloc[:, 0], _CSD.iloc[:,1], color='blue')
 
-        # Scatter plot for Line 2
-        plt.scatter(_CSD.iloc[:, 2], _CSD.iloc[:,3], color='red')
+        # Scatter plot for GCM 
+        ax.scatter(_GCM.iloc[:, 1], _GCM.iloc[:,2], color='red')
 
-        # Set labels and title
+        #Add text
+        if _GCM.iloc[-1, 2] - _GCM.iloc[0, 2] > 0: # last metric - first metric -> get the sign : Greater than 0 --> '+'
+            for i, val in enumerate(_GCM['intervalEnd']):
+                ax.annotate(f'{_GCM.iloc[i, 5]}', xy=(val,_GCM.iloc[i, 2]), xytext=(2, -10), textcoords='offset points', ha='left', va='top', weight = 'bold', c = 'red', size = 9)
+        else :
+            for i, val in enumerate(_GCM['intervalEnd']):
+                ax.annotate(f'{_GCM.iloc[i, 5]}', xy=(val,_GCM.iloc[i, 2]), xytext=(2, -10), textcoords='offset points', ha='left', va='top', weight = 'bold', c = 'red', size = 9)
+
         plt.xlabel(var)
         plt.ylabel(metric)
         plt.title(f'Pool Adjacent Violators : <{var}, {response}> on "{metric}"')
 
-        # Add a legend
         plt.legend(loc = 'best')
-
-        # Display the chart
+        
+        if figsavePath != None :
+            fig.patch.set_facecolor('white')
+            plt.savefig(figsavePath, dpi = dpi)
+        
         plt.show()

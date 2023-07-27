@@ -1,0 +1,12 @@
+1. MOBPY v1.0.0 
+
+FEATURES :
+  1. MOB :
+    Monotonic Optimal Binning : implementation
+
+  2. MOB_PLOT :
+    plotBinsSummary
+
+DOCUMENTATION :
+  1. README.md
+  2. API references

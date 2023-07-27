@@ -1,0 +1,9 @@
+MOBPY 1.0.1 
+
+BUG FIXES :
+  1. MOB :
+    exclude_value inputted as a list will raise error.
+
+  2. Fix documentation.
+
+  3. Add function annotation.

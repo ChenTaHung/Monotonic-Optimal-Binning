@@ -4,7 +4,7 @@
 
 <h1><span style = 'font-size:smaller'> MOBPY.plot.MOB_PLOT.plotBinsSummary </span></h1>
 
-_`static method`_ **MOB_PLOT.`plotBinsSummary`(monoOptBinTable, var_name, bar_fill = 'skyblue', bar_alpha = 0.5, bar_width = 0.5, bar_text_color = 'darkblue', line_color = 'orange', line_width = 3, dot_color = 'red', dot_size = 80, annotation_font_weight = 'bold', figsavePath: str = None , dpi:int = 300)**
+_`static method`_ **MOB_PLOT.`plotBinsSummary`(monoOptBinTable, bar_fill = 'skyblue', bar_alpha = 0.5, bar_width = 0.5, bar_text_color = 'darkblue', line_color = 'orange', line_width = 3, dot_color = 'red', dot_size = 80, annotation_font_weight = 'bold', figsavePath: str = None , dpi:int = 300)**
 
 > Visualize the binning Summary dataframe.
 
@@ -20,9 +20,7 @@ _`static method`_ **MOB_PLOT.`plotBinsSummary`(monoOptBinTable, var_name, bar_fi
 
 <p align = 'center'><img src = 'https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/images/Durationinmonth%20bins%20summary.png' alt = 'Image' style = 'width: 800px'/></p>
 
-__*var_name*__: `str`
 
-> The name of the [**`var`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-MOB-MOB.md) variable to show in the chart.
 
 __*bar_fill*__: `str`, _default_ = `'skyblue'`
 

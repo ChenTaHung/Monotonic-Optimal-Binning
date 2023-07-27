@@ -1,0 +1,29 @@
+MOBPY v1.1.0 
+NEW FEATURES :
+
+  1. PAVA implementation
+  2. MOB_PLOT.plotPAVA_CSD
+  3. Both PAVA and MOB can now apply results to pandas.Series with method:
+
+FIX :
+
+  1. MOB Plot: now can show missing data and exlusive data on the chart.
+
+OPTIMIZATION :
+
+  1. MOB
+    binsummary adjust column name and modify result display.
+      -> [intervalStart | intervalEnd) | .....
+    MOB result : Set index name to the var argument.
+
+  2. MOB_PLOT :
+    plotBinsSummary :
+      -> remove `var_name` argument.
+      -> use interval to represent x-axis
+      -> if output set fig.patch.set_facecolor('white')
+      
+
+
+  
+
+

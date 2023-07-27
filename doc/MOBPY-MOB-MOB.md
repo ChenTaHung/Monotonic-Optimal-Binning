@@ -55,6 +55,8 @@ MOB_ALGO = MOB(data = df, var = 'Durationinmonth', response = 'default', exclude
 
 > Execute the MOB algorithm.
 
+[**`applyMOB`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-MOB-MOB-applyMOB.md)()
+
 <br>
 
 <h3><strong> Attributes : </strong></h3>

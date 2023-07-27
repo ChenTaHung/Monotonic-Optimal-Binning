@@ -25,7 +25,7 @@ class PAVA :
         self._metric = metric
         self._add_var_aggFunc = add_var_aggFunc
         self._exclude_value = exclude_value
-        self._orgData_Assignment = None
+        self._OrgDataAssignment = None
         self._CSD_Summary = None
         self._GCM_Summary = None
         self._PAV_Summary = None
@@ -106,8 +106,8 @@ class PAVA :
         return self._add_var_aggFunc
     
     @property
-    def orgDataAssignment(self) -> Union[pd.DataFrame, None] :
-        return self._orgData_Assignment
+    def OrgDataAssignment(self) -> Union[pd.DataFrame, None] :
+        return self._OrgDataAssignment
     
     @property
     def GCM_Summary(self) -> Union[pd.DataFrame, None] :
@@ -144,7 +144,7 @@ class PAVA :
     
     def __summarize_GCM_CSD(self, GCM, CSD, MonoTable) :
         '''
-        CSD: acceptable inputs : { mean | sum | std | var | min | max | range }
+        CSD: acceptable inputs : { mean | sum | std | var | min | max | ptp }
             self.var | count | sum | std | max | min
             ----------------------------------------
         ===============================================================
@@ -161,28 +161,18 @@ class PAVA :
         elif self.metric == 'var' :
             _GCM[self.metric] =  _GCM['std'] ** 2
                    
-        elif self.metric == 'range' :
+        elif self.metric == 'ptp' :
             _GCM[self.metric] =  _GCM['max'] - _GCM['min']
         
         else :
             pass
         
-        # Cumulative Sum Diagram 
-        # Summation, std
-        # if self.metric == 'sum' :
-        #     _mono = MonoTable.copy()
-        #     _mono[f'{self.response}_cum{self.metric.capitalize()}'] = _mono.groupby('assignValue')[self.response].cumsum()
-        # elif self.metric == 'std' :
-        #     _mono = MonoTable.copy()
-        # else :
         _CSD = CSD.copy()
-        _CSD['assignValue'] = _CSD.apply(lambda row: _GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (_GCM['intervalEnd'] >= row[self.var]), 'intervalEnd'].values[0], axis=1)
+        _CSD['intervalStart'] = _CSD.apply(lambda row: _GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (_GCM['intervalEnd'] >= row[self.var]), 'intervalStart'].values[0], axis=1)
+        _CSD['intervalEnd'] = _CSD.apply(lambda row: _GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (_GCM['intervalEnd'] >= row[self.var]), 'intervalEnd'].values[0], axis=1)
         _CSD['assignMetric'] = _CSD.apply(lambda row: _GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (_GCM['intervalEnd'] >= row[self.var]), self.metric].values[0], axis=1)
-
-        # remove duplicate age when PAVA rolled back to merge previous nodes
-        # _CSD = _CSD.sort_values(by = self.var).drop_duplicates(self.var, keep = 'last')
-        
-        return _GCM[['intervalStart', 'intervalEnd', self.metric]], _CSD[[self.var,  f'{self.response}_cum{self.metric.capitalize()}', 'assignValue', 'assignMetric']]  
+      
+        return _GCM[['intervalStart', 'intervalEnd', self.metric]], _CSD[[self.var,  f'{self.response}_cum{self.metric.capitalize()}', 'intervalStart', 'intervalEnd', 'assignMetric']]  
 
     def runPAVA(self, sign = 'auto') -> None:
         
@@ -200,30 +190,40 @@ class PAVA :
         GCM, CSD = self.__summarize_GCM_CSD(GCM = _GCM, CSD = _CSD, MonoTable = _MonoTable)
         
         # select column to generate additional variable aggrgation (add_var_aggFunc)
-        chosen_col_list = [self.var, self.response] + list(self.add_var_aggFunc.keys())
         
-        orgDataAssignment = self.df_sel.copy()[chosen_col_list]
-        # print(GCM)
-        # print('===================')
-        # print(CSD)
-        # print('===================')
-        orgDataAssignment['assignValue'] = orgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), 'intervalStart'].values[0], axis=1)
-        orgDataAssignment['assignMetric'] = orgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), self.metric].values[0], axis=1)
-        # print(orgDataAssignment)
-        # print(orgDataAssignment.dtypes)
-        PAVA_Result_Df = orgDataAssignment.groupby('assignValue').agg(self.add_var_aggFunc).reset_index().fillna(0).sort_values(by='assignValue')
-        newColName = [self.var]
-        for var, stat in zip(self.add_var_aggFunc.keys(), self.add_var_aggFunc.values()) :
-            if isinstance(stat, list) :
-                for singlestat in stat :
-                    newColName.append('_'.join(tuple([var, singlestat])))
-            else :
-                newColName.append('_'.join(tuple([var, stat])))                
-        PAVA_Result_Df.columns = newColName
-        
+        if self.add_var_aggFunc != None :
+            # create additional variables aggragation result dataframe to merge back to the GCM.
+            chosen_col_list = [self.var, self.response] + list(self.add_var_aggFunc.keys())
+            OrgDataAssignment = self.df_sel.copy()[chosen_col_list]
+            OrgDataAssignment['assignValue'] = OrgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), 'intervalStart'].values[0], axis=1)
+            OrgDataAssignment['assignMetric'] = OrgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), self.metric].values[0], axis=1)
+
+            PAVA_Result_Df = OrgDataAssignment.groupby('assignValue').agg(self.add_var_aggFunc).reset_index().fillna(0).sort_values(by='assignValue')
+            newColName = [self.var]
+            for var, stat in zip(self.add_var_aggFunc.keys(), self.add_var_aggFunc.values()) :
+                if isinstance(stat, list) :
+                    for singlestat in stat :
+                        if callable(singlestat) : # a callable aggrgate function
+                            newColName.append('_'.join(tuple([var, singlestat.__name__])))
+                        else :
+                            newColName.append('_'.join(tuple([var, singlestat])))
+                else :
+                    if callable(stat) : # a callable aggrgate function
+                        newColName.append('_'.join(tuple([var, stat.__name__])))
+                    else :
+                        newColName.append('_'.join(tuple([var, stat])))
+            PAVA_Result_Df.columns = newColName
+            PAVA_Final_Df = GCM.sort_values(by = 'intervalStart').rename(columns = {'intervalStart':self.var, self.metric : f'{self.response}_{self.metric}'})
+            PAVA_Result = PAVA_Result_Df.merge(PAVA_Final_Df, how = 'left', on = self.var)
+        else :
+            chosen_col_list = [self.var, self.response]
+            OrgDataAssignment = self.df_sel.copy()[chosen_col_list]
+            OrgDataAssignment['assignValue'] = OrgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), 'intervalStart'].values[0], axis=1)
+            OrgDataAssignment['assignMetric'] = OrgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), self.metric].values[0], axis=1)
+
+            PAVA_Final_Df = GCM.sort_values(by = 'intervalStart').rename(columns = {'intervalStart':self.var, self.metric : f'{self.response}_{self.metric}'})
+            PAVA_Result = PAVA_Final_Df
         #Generate final PAVA result (include additional var aggregation functions)
-        PAVA_Final_Df = GCM.sort_values(by = 'intervalStart').rename(columns = {'intervalStart':self.var, self.metric : f'{self.response}_{self.metric}'})
-        PAVA_Result = PAVA_Result_Df.merge(PAVA_Final_Df, how = 'left', on = self.var)
         # create interval 
         PAVA_Result.insert(1, column='intervalEnd)', value=PAVA_Result[self.var].shift(-1))
         PAVA_Result.rename(columns = {self.var:'[intervalStart'}, inplace=True)
@@ -231,11 +231,11 @@ class PAVA :
         PAVA_Result.iloc[-1, 1] = np.inf
         PAVA_Result = PAVA_Result.drop('intervalEnd', axis = 1)
         '''
-        orgDataAssignment : original dataset but only select columns below 
+        OrgDataAssignment : original dataset but only select columns below 
         self.var | self.response | assignValue | assignMetric
         -----------------------------------------------------
         '''
-        self._orgData_Assignment = orgDataAssignment
+        self._OrgDataAssignment = OrgDataAssignment
         '''
         CSDSummary : a groupby(var) dataset with selected metric column which represent the cumulative sum diagram of the chosen variable and response
         self.var | self.metric
@@ -254,7 +254,6 @@ class PAVA :
         --------------------------------------------------------------------------------------------------------------------------------------------
         '''
         self._PAV_Summary = PAVA_Result
-        # TODO : PAVA self.var -> interval  `[intervalStart, intervarStart(shift(-1)))`
 
     def applyPAVA(self, var_column: pd.Series, assign:str = 'interval') -> pd.Series :
         '''
@@ -269,6 +268,3 @@ class PAVA :
             PAVA_Res_Series = var_column.apply(lambda row : self.PAV_Summary.loc[(self.PAV_Summary["[intervalStart"] <= row)&(self.PAV_Summary["intervalEnd)"] > row), "intervalEnd)"].values[0])
         
         return PAVA_Res_Series
-    
-    # #TODO : df['New_X'] = PAVA.applyPAVA(original_var = df['x'])
-    #             print(PAVA.PAV_Summary)

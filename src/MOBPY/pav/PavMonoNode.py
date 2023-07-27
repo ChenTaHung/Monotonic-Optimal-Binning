@@ -50,17 +50,29 @@ class PavMonoNode:
     def min(self) -> float :
         return self.stats_array[4]
     
+    @property
+    def mean(self) -> float :
+        return self.sum / self.count
+    
+    @property
+    def ptp(self) -> float :
+        return self.max - self.min
+    
+    @property
+    def var(self) -> float :
+        return self.std ** 2
+    
 
     @property
     def stats(self) -> Union[float, int]:
         '''
-        acceptable inputs : { count | mean | sum | std | var | min | max | range }
+        acceptable inputs : { count | mean | sum | std | var | min | max | ptp }
         '''
         if self.metric == 'count' :
             return self.count
         
         elif self.metric == 'mean' :
-            return self.sum / self.count
+            return self.mean
         
         elif self.metric == 'sum' :
             return self.sum
@@ -69,7 +81,7 @@ class PavMonoNode:
             return self.std
         
         elif self.metric == 'var' :
-            return self.std ** 2
+            return self.var
         
         elif self.metric == 'min' :
             return self.min
@@ -77,8 +89,8 @@ class PavMonoNode:
         elif self.metric == 'max' :
             return self.max
         
-        elif self.metric == 'range' :
-            return self.max - self.min
+        elif self.metric == 'ptp' :
+            return self.ptp
 
         else :
             return np.nan

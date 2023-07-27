@@ -24,6 +24,10 @@
 
 > Visualize the binning Summary dataframe. See [**`runMOB`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-MOB-MOB-runMOB.md) for more information.
 
+[**`plotPAVACsd`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-plot-MOB_PLOT-MOB_PLOT-plotBinsSummary.md)([CSD_Summary figsavePath, dpi])
+
+> Visualize the PAVA Summary dataframe. See [**`runPAVA`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-PAVA-PAVA-runPAVA.md) for more information.
+
 <br><br>
 
 `↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓`
