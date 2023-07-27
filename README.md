@@ -96,7 +96,7 @@ MOB_PLOT.plotPAVACsd(CSD_Summary = P.CSD_Summary)
 _pavRes = P.applyPAVA(df['age'], 'interval')
 ```
 
-<p align = 'center'><img src = 'https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/charts/age-on-insurance-PAVA-summary.png' alt = 'Image' style = 'width: 1200px'/></p>
+<p align = 'center'><img src = 'https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/charts/age-insuranceclaim-PAVA.png' alt = 'Image' style = 'width: 1200px'/></p>
 
 <p align = 'center'> <sub> PAVA CSD & GCM visualization example </sub> </p>
 
