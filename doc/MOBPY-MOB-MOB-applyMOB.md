@@ -16,7 +16,7 @@ __*var_column*__ : `pandas.Series`
 
 > The column that need to apply the dicretization result generated from [***`MOB.runMOB`*()**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-MOB-MOB-runMOB.md). 
 
-__*assign*__ : `str`, **{'interval', 'start', 'end'}** _default_ = `'interval'`
+__*assign*__ : `str`, **{'interval', 'start', 'end'}**, _default_ = `'interval'`
 
 > The representation way of the output.
 > 
