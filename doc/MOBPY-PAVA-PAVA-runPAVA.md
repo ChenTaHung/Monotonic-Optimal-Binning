@@ -49,6 +49,10 @@ print(P.GCM_Summary)
 print(P.OrgDataAssignment)
 ```
 
+<p align = 'center'><img src = 'https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/images/age-on-insurance-PAVA-summary.png' alt = 'Image' style = 'width: 1200px'/></p>
+
+<p align = 'center'> <sub> PAVA.PAV_Summary output </sub> </p>
+
 <br><br>
 
 `↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓`
