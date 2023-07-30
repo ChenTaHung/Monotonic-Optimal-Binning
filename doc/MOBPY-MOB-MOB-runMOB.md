@@ -8,7 +8,7 @@ _`instance method`_ **MOB.`runMOB`(mergeMethod, sign = 'auto')**
 
 > Execute the MOB algorithm.
 
-[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L182-L238)
+[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L195-L256)
 
 ### **Parameters** : <br>
 
@@ -45,7 +45,7 @@ SizeBinning = MOB_ALGO.runMOB(mergeMethod='Size')
 
 <h3><strong> Attributes : </strong></h3>
 
-[**`finishBinningTable`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L197-L200)
+[**`finishBinningTable`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L152-L154)
 
 > The table that shows the binning result for the data that has precluded the missing values and exclude_values.
 

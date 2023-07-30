@@ -1,0 +1,26 @@
+MOBPY v2.0.0 (Future release)
+
+FEATURES :
+
+  1. Validation 
+    - return validation for every step in optimal binning.
+    - 
+
+OPTIMIZATION :
+
+  1. PAVA merge into MOBPY
+    - setBinningConstraints -> set to optional for every arguments.
+  
+  2. Summary Table :
+    - intervalStart
+    - intervalEnd
+    - response's metric
+    - observation proportion
+    - if BinningConstraints != None : summary table show informations.
+  
+  3. Plotting :
+    - CSD & GCM plot (keep)
+    - Binning Plot
+      1. interval (x-aixs)
+      2. metric value (y-axis)
+      3. 

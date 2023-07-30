@@ -8,7 +8,7 @@ _`static method`_ **MOB_PLOT.`plotPAVACsd`(CSD_Summary, figsavePath: str = None 
 
 > Visualize the cumulative sum diagram (CSD) and greatest convex minorant (GCM) of the PAVA result.
 
-[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/plot/MOB_PLOT.py)
+[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/plot/MOB_PLOT.py#L66-L120)
 
 ### **Parameters** : <br>
 

@@ -11,7 +11,7 @@
 
 > Construct the object `PAVA`.
 
-[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#)
+[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#L8-L84)
 
 ### **Parameters** : <br>
 
@@ -77,11 +77,11 @@ P = PAVA(data = df, var = 'age', response = 'insuranceclaim', metric='mean')
 
 <h3><strong> Methods : </strong></h3>
 
-[**`runPAVA`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-PAVA-PAVA-runPAVA.md)([sign])
+[**`runPAVA`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-PAVA-PAVA-runPAVA.md#L175-L254)([sign])
 
 > Execute the PAV algorithm (PAVA).
 
-[**`applyPAVA`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-PAVA-PAVA-applyPAVA.md)([var_column, assign])
+[**`applyPAVA`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-PAVA-PAVA-applyPAVA.md#L256-L268)([var_column, assign])
 
 > Execute the PAV algorithm (PAVA).
 
@@ -89,19 +89,19 @@ P = PAVA(data = df, var = 'age', response = 'insuranceclaim', metric='mean')
 
 <h3><strong> Attributes : </strong></h3>
 
-[**`PAV_Summary`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py)
+[**`PAV_Summary`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#L118-L120)
 
 > The dataset showing the continous interval information, along with the additional variable aggregation result and the corresponding metric values.
 
-[**`CSD_Summary`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#)
+[**`CSD_Summary`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#L114-L116)
 
 > The cumulative metric recorded through the PAVA process, it also shows how PAVA roll back to get the monotonic metric to comply with the restriction according to the [reference](https://repository.tudelft.nl/islandora/object/uuid:5a111157-1a92-4176-9c8e-0b848feb7c30) **`Eq. 1.1`**.
 
-[**`GCM_Summary`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#)
+[**`GCM_Summary`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#L110-L112)
 
 > Greatest convex minorant summary result. It shows the interval and the calculated metric value.
 
-[**`OrgDataAssignment`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py)
+[**`OrgDataAssignment`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#L106-L108)
 
 > The original dataset with chosen `var` and `response` columns, along with the assignment of the "starting" value of the given interval from the PAVA binning result and metrics.
 

@@ -8,7 +8,7 @@ _`instance method`_ **MOB.`runMOB`(sign = 'auto')**
 
 > Execute the MOB algorithm.
 
-[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#L182-L238)
+[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#L175-L254)
 
 ### **Parameters** : <br>
 
@@ -21,13 +21,13 @@ _`instance method`_ **MOB.`runMOB`(sign = 'auto')**
 > **`runPAVA`** will store 4 attributes into the `PAVA` object.
 
 
-- > [**`PAV_Summary`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py): The dataset showing the continous interval information, along with the additional variable aggregation result and the corresponding metric values.
+- > [**`PAV_Summary`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#L118-L120): The dataset showing the continous interval information, along with the additional variable aggregation result and the corresponding metric values.
 
-- > [**`CSD_Summary`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#): The cumulative metric recorded through the PAVA process, it also shows how PAVA roll back to get the monotonic metric to comply with the restriction according to the [reference](https://repository.tudelft.nl/islandora/object/uuid:5a111157-1a92-4176-9c8e-0b848feb7c30) **`Eq. 1.1`**.
+- > [**`CSD_Summary`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#L114-L116): The cumulative metric recorded through the PAVA process, it also shows how PAVA roll back to get the monotonic metric to comply with the restriction according to the [reference](https://repository.tudelft.nl/islandora/object/uuid:5a111157-1a92-4176-9c8e-0b848feb7c30) **`Eq. 1.1`**.
 
-- > [**`GCM_Summary`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#): Greatest convex minorant summary result. It shows the interval and the calculated metric value.
+- > [**`GCM_Summary`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#L110-L112): Greatest convex minorant summary result. It shows the interval and the calculated metric value.
 
-- > [**`OrgDataAssignment`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py): The original dataset with chosen `var` and `response` columns, along with the assignment of the "starting" value of the given interval from the PAVA binning result and metrics.
+- > [**`OrgDataAssignment`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/PAVA.py#L106-L108): The original dataset with chosen `var` and `response` columns, along with the assignment of the "starting" value of the given interval from the PAVA binning result and metrics.
 
 **Example** :
 

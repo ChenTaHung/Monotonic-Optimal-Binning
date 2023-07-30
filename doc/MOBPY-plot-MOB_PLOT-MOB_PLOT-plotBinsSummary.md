@@ -8,7 +8,7 @@ _`static method`_ **MOB_PLOT.`plotBinsSummary`(monoOptBinTable, bar_fill = 'skyb
 
 > Visualize the binning Summary dataframe.
 
-[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/plot/MOB_PLOT.py#L7-L62)
+[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/plot/MOB_PLOT.py#L7-L64)
 
 ### **Parameters** : <br>
 

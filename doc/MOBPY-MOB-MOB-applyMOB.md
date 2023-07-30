@@ -8,7 +8,7 @@ _`instance method`_ **MOB.`applyMOB`(var_column : pd.Series, assign :str = 'inte
 
 > Apply the MOB result to the given variable column (`var_column`) and create a new pandas.Series.
 
-[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L257-L269)
+[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L258-L273)
 
 ### **Parameters** : <br>
 

@@ -2,8 +2,6 @@
 import pandas as pd
 import numpy as np
 from typing import Union
-import os
-os.chdir('/Users/chentahung/Desktop/git/mob-py/src')
 from MOBPY.pav.PAV import PAV
 
 class PAVA :

@@ -9,7 +9,7 @@ _`instance method`_ **MOB.`setBinningConstraints`(max_bins :int = 6, min_bins :i
 > Set the detail limitation of the binning process to obtain the optimal binning result. This is a must-do step before start running the MOB algorithm.
 
 
-[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L159-L167)
+[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L160-L168)
 
 ### **Parameters** : <br>
 
@@ -62,7 +62,7 @@ MOB_ALGO.setBinningConstraints( max_bins = 6, min_bins = 3,
 
 <h3><strong> Attributes : </strong></h3>
 
-[**`constraintsStatus`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L167)
+[**`constraintsStatus`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L168)
 
 > The initial value of **`constraintsStatus`** is `False`. Once the user had run the method *`setBinningConstraints`()*, the value of the attribute will be set to `True` to prevent a Exception error while executing the [__*`runMOB`*__](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-MOB-MOB-runMOB.md) method.
 

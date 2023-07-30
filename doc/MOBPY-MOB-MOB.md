@@ -11,7 +11,7 @@
 
 > Construct the object `MOBPY`.
 
-[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L6-L79)
+[**[source]**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L8-L82)
 
 ### **Parameters** : <br>
 
@@ -65,23 +65,23 @@ MOB_ALGO = MOB(data = df, var = 'Durationinmonth', response = 'default', exclude
 
 > See [**`setBinningConstraints`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-MOB-MOB-setBinningConstraints.md)
 
-[**`min_bins`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L131-L133)
+[**`min_bins`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L129-L131)
 
 > See [**`setBinningConstraints`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-MOB-MOB-setBinningConstraints.md)
 
-[**`max_samples`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L139-L140)
+[**`max_samples`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L136-L138)
 
 > See [**`setBinningConstraints`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-MOB-MOB-setBinningConstraints.md)
 
-[**`min_samples`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L143-L145)
+[**`min_samples`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L140-L142)
 
 > See [**`setBinningConstraints`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-MOB-MOB-setBinningConstraints.md)
 
-[**`min_bads`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L147-L149)
+[**`min_bads`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L144-L146)
 
 > See [**`setBinningConstraints`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-MOB-MOB-setBinningConstraints.md)
 
-[**`maximize_bins`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L151-L153)
+[**`maximize_bins`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L148-L150)
 
 > See [**`setBinningConstraints`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-MOB-MOB-setBinningConstraints.md)
 
@@ -89,7 +89,7 @@ MOB_ALGO = MOB(data = df, var = 'Durationinmonth', response = 'default', exclude
 
 > A boolean value shows that whether the user has set the binning constraints. See [**`setBinningConstraints`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-MOB-MOB-setBinningConstraints.md)
 
-[**`finishBinningTable`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L155-L157)
+[**`finishBinningTable`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/src/MOBPY/MOB.py#L152-L154)
 
 > The table that shows the binning result for the data that has precluded the missing values and exclude_values.
 
