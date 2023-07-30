@@ -88,7 +88,13 @@ print(P.OrgDataAssignment)
 print(P.CSD_Summary)
 print(P.GCM_Summary)
 print(P.PAV_Summary)
+```
 
+<p align = 'center'><img src = 'https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/images/age-on-insurance-PAVA-summary.png' alt = 'Image' style = 'width: 1200px'/></p>
+
+<p align = 'center'> <sub> PAVA.PAV_Summary output </sub> </p>
+
+```python
 # Visualize the Cumulative Sum Diagram and Greatest Convex Minorant of the CSD
 MOB_PLOT.plotPAVACsd(CSD_Summary = P.CSD_Summary)
 
@@ -176,7 +182,9 @@ P = PAVA(data = df, var = 'age', response = 'insuranceclaim', metric='mean',
          add_var_aggFunc = {'bmi':'mean', 'smoker':'sum', 'region':['max', 'min'], 'charges' : np.ptp}, exclude_value = None)
 ```
 
+<p align = 'center'><img src = 'https://github.com/ChenTaHung/Monotonic-Optimal-Binning/blob/main/doc/images/age-on-insurance-PAVA-summary.png' alt = 'Image' style = 'width: 1200px'/></p>
 
+<p align = 'center'> <sub> PAVA.PAV_Summary output </sub> </p>
 
 
 <h2><strong> Full Documentation </strong></h2>
