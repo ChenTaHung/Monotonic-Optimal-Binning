@@ -2,7 +2,7 @@ MOBPY v1.1.0
 NEW FEATURES :
 
   1. PAVA implementation
-  2. MOB_PLOT.plotPAVA_CSD
+  2. MOB_PLOT.plotPAVACsd
   3. Both PAVA and MOB can now apply results to pandas.Series with method:
 
 FIX :
