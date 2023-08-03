@@ -1,0 +1,8 @@
+MOBPY v1.1.1
+
+FIXES :
+
+PAVA image :
+  
+  - fix the interval display to show `-inf` as the minimum interval start Value
+  - Fix the brackets for the interval display since we cannot contain inf/-inf.
