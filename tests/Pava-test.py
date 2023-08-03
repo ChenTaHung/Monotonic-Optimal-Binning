@@ -12,15 +12,15 @@ df = pd.read_csv('/Users/chentahung/Desktop/git/mob-py/data/insurance2.csv')
 #%%
 # {'bmi':'mean', 'smoker':'sum', 'region':['max', 'min'], 'charges' : np.ptp}
 P = PAVA(data = df, var = 'age', response = 'insuranceclaim', metric='mean', 
-         add_var_aggFunc = {'bmi':'mean', 'smoker':'sum', 'region':['max', 'min'], 'charges' : np.ptp})
-P.runPAVA(sign = '+')
+         add_var_aggFunc = None)
+P.runPAVA()
 # %%
 # print(P.OrgDataAssignment)
 print(P.CSD_Summary)
 # print(P.GCM_Summary)
 print(P.PAV_Summary)
 # %%
-MOB_PLOT.plotPAVACsd(CSD_Summary = P.CSD_Summary)
+MOB_PLOT.plotPAVACsd(CSD_Summary = P.CSD_Summary, figsavePath='/Users/chentahung/Desktop/git/mob-py/doc/charts/age-insuranceclaim-PAVA.png', dpi = 1200)
 
 # %%
 _res = P.applyPAVA(df['age'], 'interval')

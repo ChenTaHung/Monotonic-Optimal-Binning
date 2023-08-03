@@ -225,8 +225,8 @@ class PAVA :
         # create interval 
         PAVA_Result.insert(1, column='intervalEnd)', value=PAVA_Result[self.var].shift(-1))
         PAVA_Result.rename(columns = {self.var:'[intervalStart'}, inplace=True)
-        PAVA_Result.iloc[0, 0] = -np.inf
-        PAVA_Result.iloc[-1, 1] = np.inf
+        PAVA_Result.iloc[0, 0] = -np.inf #minimum interval start
+        PAVA_Result.iloc[-1, 1] = np.inf #maximum interval end
         PAVA_Result = PAVA_Result.drop('intervalEnd', axis = 1)
         '''
         OrgDataAssignment : original dataset but only select columns below 

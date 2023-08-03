@@ -75,9 +75,10 @@ class MOB_PLOT :
         _GCM = CSD_Summary[['intervalStart', 'intervalEnd', 'assignMetric']].drop_duplicates(['intervalStart', 'intervalEnd', 'assignMetric'])
         _GCM['[intervalStart'] = _GCM['intervalStart'].astype(str)
         _GCM['intervalEnd)'] = _GCM['intervalStart'].shift(-1).astype(str)
-        _GCM.iloc[0,3] = str(np.inf)
-        _GCM.iloc[-1,4] = str(-np.inf)
+        _GCM.iloc[0,3] = str(-np.inf)
+        _GCM.iloc[-1,4] = str(np.inf)
         _GCM['interval'] = '[' + _GCM['[intervalStart'] + ',' + _GCM['intervalEnd)'] + ')'
+        _GCM.loc[0, 'interval'] = _GCM.loc[0, 'interval'].replace('[', '(')
         '''
         GCM
         intervalStart | intervalEnd | assignMetric | [intervalStart | intervalEnd) | interval
