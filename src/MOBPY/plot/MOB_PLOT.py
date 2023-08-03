@@ -13,7 +13,7 @@ class MOB_PLOT :
         binSummaryTable = monoOptBinTable.copy()
         var_name = binSummaryTable.index.name        
         binSummaryTable['interval'] = '[' + binSummaryTable['[intervalStart'].astype(str) + ' , ' + binSummaryTable['intervalEnd)'].astype(str) + ')'
-        
+        binSummaryTable.loc[0, 'interval'] = binSummaryTable.loc[0, 'interval'].replace('[', '(')
         # Plot bar chart for 'dist_obs'
         bars = ax1.bar(np.arange(len(binSummaryTable['interval'])), binSummaryTable['woe'], color = bar_fill, alpha = bar_alpha, width = bar_width)
         ax1.set_xticks(ticks = np.arange(len(binSummaryTable['interval'])), labels = binSummaryTable['interval'])
