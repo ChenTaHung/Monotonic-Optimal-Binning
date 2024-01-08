@@ -83,7 +83,7 @@ P = PAVA(data = df, var = 'age', response = 'insuranceclaim', metric='mean')
 
 [**`applyPAVA`**](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/tree/main/doc/MOBPY-PAVA-PAVA-applyPAVA.md#L256-L268)([var_column, assign])
 
-> Execute the PAV algorithm (PAVA).
+> Apply the MOB result to the given variable column (`var_column``) and create a new pandas.Series.
 
 <br>
 
