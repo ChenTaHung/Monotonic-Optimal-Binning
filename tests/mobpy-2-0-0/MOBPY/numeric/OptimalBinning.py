@@ -266,6 +266,101 @@ class OptimalBinning :
                         return df
             return df            
                         
+    def __OptBinningNew(self, monoTable, mergeMethod :str):
+        df = monoTable.copy()
+        
+        if ((self.maximize_bins) and (len(df) <= self.max_bins)) or ((~self.maximize_bins) and (len(df) <= self.min_bins)) :
+            # initial numbers of bins already less than the constraint -> return
+            return df
+        else :
+            while (len(df) > self.min_bins) : # if num of bins exceed min_bins 
+                if self.maximize_bins :
+                    while len(df) > self.max_bins :
+                        mergeResultMatrix = np.array(self.__calculateAdjacentPValue(df, mergeMethod)) # calculate p-value for all adjacent bin pairs
+                        p_value_array = mergeResultMatrix[:, 0] # [p_value, newTotal, newMean, pooled_std**0.5]
+
+                        # find maximum p-value index 
+                        max_p_index = np.where(p_value_array == np.max(p_value_array))[0][0] # no matter the length of maximum p-value index, only get the first one
+                        max_p = p_value_array[max_p_index]
+                        # # find minimum p-value index 
+                        if max_p > self.pvalue : # if accept null hypothesis, merge the two bins.
+                            df = self.__mergeBinsOnce(optTable = df, mergeResult = mergeResultMatrix, mergeIndex = max_p_index)
+                        elif max_p < self.pvalue and len(df) > self.max_bins:  # no p-value greater than threshold but yet meet the max_bins constraint -> update p-value
+                            self.__updatePvalue()
+                            if self.pvalue < 0.0000001 :
+                                return df
+                        else :
+                            pass
+                            
+                            
+                        if len(df) <= self.max_bins :
+                            if mergeMethod == 'Size':
+                                whileiter = 0
+                                while (any(df['total'] < self.min_samples)) and (len(df) > self.min_bins) :
+                                    mergeResultMatrix = np.array(self.__calculateAdjacentPValue(df, mergeMethod)) # calculate p-value for all adjacent bin pairs
+                                    p_value_array = mergeResultMatrix[:, 0] # [p_value, newTotal, newMean, pooled_std**0.5]
+                                    
+                                    for p in -np.sort(-p_value_array) :
+                                        for input_merge_index in np.where(p_value_array == p)[0] :
+                                            if (df.loc[input_merge_index, 'total'] < self.min_samples) or (df.loc[input_merge_index + 1, 'total'] < self.min_samples) :
+                                                df = self.__mergeBinsOnce(optTable=df, mergeResult=mergeResultMatrix, mergeIndex=input_merge_index)
+                                                break
+                                            else :
+                                                continue
+                                        break
+                                    if (len(df) <= self.min_bins) or all(df['total'] >= self.min_samples) :
+                                        return df
+                            else :
+                                return df
+                    
+                    return df
+                else :
+                    mergeResultMatrix = np.array(self.__calculateAdjacentPValue(df, mergeMethod)) # calculate p-value for all adjacent bin pairs
+                    p_value_array = mergeResultMatrix[:, 0] # [p_value, newTotal, newMean, pooled_std**0.5]
+
+                    # find maximum p-value index 
+                    max_p_index = np.where(p_value_array == np.max(p_value_array))[0][0] # no matter the length of maximum p-value index, only get the first one
+                    max_p = p_value_array[max_p_index]
+                    # # find minimum p-value index 
+                    min_p_index = np.where(p_value_array == np.min(p_value_array))[0][0] 
+                    min_p = p_value_array[min_p_index]
+
+                    if max_p > self.pvalue : # if accept null hypothesis, merge the two bins.
+                        df = self.__mergeBinsOnce(optTable = df, mergeResult = mergeResultMatrix, mergeIndex = max_p_index)
+                    elif max_p < self.pvalue and len(df) > self.min_bins :
+                        self.__updatePvalue()
+                        if self.pvalue < 0.0000001 :
+                            return df
+                    else:  # no p-value greater than threshold but yet meet the max_bins constraint -> update p-value
+                        if (min_p > self.pvalue) and (len(df) - ((p_value_array > self.pvalue).sum()) >= self.min_bins) : 
+                            # if the result that merge all the bins lower than the current p threshold still > min_bins then go ahead.
+                                i_iter_adjust = 0  # each time merge the bins, the original p-value index needs to minus one the make sure the correct bins index that will be merged in the next loop
+                                # index 1 and index 3 need to be merged: if index 1 merge with the index 2 bin, then the original index3 bin will be the index 2 bin in new df
+                                for i, p in enumerate(p_value_array) :
+                                    if p > self.pvalue :
+                                        df = self.__mergeBinsOnce(optTable = df, mergeResult = mergeResultMatrix, mergeIndex = i - i_iter_adjust)
+                                        i_iter_adjust += 1
+                        else :
+                            break
+                        
+            if mergeMethod == 'Size':
+                whileiter = 0
+                while (any(df['total'] < self.min_samples)) and (len(df) > self.min_bins) :
+                    mergeResultMatrix = np.array(self.__calculateAdjacentPValue(df, mergeMethod)) # calculate p-value for all adjacent bin pairs
+                    p_value_array = mergeResultMatrix[:, 0] # [p_value, newTotal, newMean, pooled_std**0.5]
+                    for p in -np.sort(-p_value_array) :
+
+                        for input_merge_index in np.where(p_value_array == p)[0] :
+                            if (df.loc[input_merge_index, 'total'] < self.min_samples) or (df.loc[input_merge_index + 1, 'total'] < self.min_samples) :
+                                df = self.__mergeBinsOnce(optTable=df, mergeResult=mergeResultMatrix, mergeIndex=input_merge_index)
+                                break
+                            else :
+                                continue
+
+                        break
+                    if (len(df) <= self.min_bins) or all(df['total'] >= self.min_samples) :
+                        return df
+            return df
         
     def monoOptBinning(self, mergeMethod :str = 'Stats') :
         df = self.MonoDf.copy()

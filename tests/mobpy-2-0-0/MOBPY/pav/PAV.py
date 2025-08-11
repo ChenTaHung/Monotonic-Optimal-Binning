@@ -73,7 +73,7 @@ class PAV :
             pearson_corr = MonoTable[self.var].corr(MonoTable['max']-MonoTable['min'])
         
         else :
-            raise ValueError(f'Invalid metric: {self.metric}, choose one of the following values:\n {{ mean | sum | std | var | min | max | ptp }}')
+            raise ValueError(f'Invalid metric: {self.metric}, choose one of the following values:\n {{ count | mean | sum | std | var | min | max | ptp }}')
         
         if pearson_corr > 0 :
             sign = '+'
@@ -95,7 +95,6 @@ class PAV :
         '''
         create greatest convex minorant (GCM) of the Cumulative Sum Diagram (CSD)
         
-        Relevant
         '''
 
         root: PavMonoNode = PavMonoNode(value = 0, stats_array = np.array([0, 0, 0, 0, 0]), metric = self.metric)

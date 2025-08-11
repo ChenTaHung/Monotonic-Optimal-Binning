@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from typing import Union
 from MOBPY.pav.PAV import PAV
+from MOBPY.numeric.OptimalBinning import OptimalBinning
 
 class PAVA :
     def __init__(self, data, var :str, response : str, metric : str, add_var_aggFunc : dict = None, exclude_value = None) :
@@ -170,9 +171,9 @@ class PAVA :
         _CSD['intervalEnd'] = _CSD.apply(lambda row: _GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (_GCM['intervalEnd'] >= row[self.var]), 'intervalEnd'].values[0], axis=1)
         _CSD['assignMetric'] = _CSD.apply(lambda row: _GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (_GCM['intervalEnd'] >= row[self.var]), self.metric].values[0], axis=1)
       
-        return _GCM[['intervalStart', 'intervalEnd', self.metric]], _CSD[[self.var,  f'{self.response}_cum{self.metric.capitalize()}', 'intervalStart', 'intervalEnd', 'assignMetric']]  
+        return _GCM[['intervalStart', 'intervalEnd', self.metric, 'std', 'count']], _CSD[[self.var,  f'{self.response}_cum{self.metric.capitalize()}', 'intervalStart', 'intervalEnd', 'assignMetric']]  
 
-    def runPAVA(self, sign = 'auto') -> None:
+    def runPAVA(self, optimalBinning_required = False, sign = 'auto') -> None:
         
         '''
         Execute PAVA Algorithm
@@ -188,46 +189,66 @@ class PAVA :
         GCM, CSD = self.__summarize_GCM_CSD(GCM = _GCM, CSD = _CSD, MonoTable = _MonoTable)
         
         # select column to generate additional variable aggrgation (add_var_aggFunc)
-        
-        if self.add_var_aggFunc != None :
-            # create additional variables aggragation result dataframe to merge back to the GCM.
-            chosen_col_list = [self.var, self.response] + list(self.add_var_aggFunc.keys())
-            OrgDataAssignment = self.df_sel.copy()[chosen_col_list]
-            OrgDataAssignment['assignValue'] = OrgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), 'intervalStart'].values[0], axis=1)
-            OrgDataAssignment['assignMetric'] = OrgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), self.metric].values[0], axis=1)
+        if not optimalBinning_required:
+            # no need to optimize binning
+            GCM = GCM[['intervalStart', 'intervalEnd', self.metric]]
+            
+            if self.add_var_aggFunc != None :
+                # create additional variables aggragation result dataframe to merge back to the GCM.
+                chosen_col_list = [self.var, self.response] + list(self.add_var_aggFunc.keys())
+                OrgDataAssignment = self.df_sel.copy()[chosen_col_list]
+                OrgDataAssignment['assignValue'] = OrgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), 'intervalStart'].values[0], axis=1)
+                OrgDataAssignment['assignMetric'] = OrgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), self.metric].values[0], axis=1)
 
-            PAVA_Result_Df = OrgDataAssignment.groupby('assignValue').agg(self.add_var_aggFunc).reset_index().fillna(0).sort_values(by='assignValue')
-            newColName = [self.var]
-            for var, stat in zip(self.add_var_aggFunc.keys(), self.add_var_aggFunc.values()) :
-                if isinstance(stat, list) :
-                    for singlestat in stat :
-                        if callable(singlestat) : # a callable aggrgate function
-                            newColName.append('_'.join(tuple([var, singlestat.__name__])))
-                        else :
-                            newColName.append('_'.join(tuple([var, singlestat])))
-                else :
-                    if callable(stat) : # a callable aggrgate function
-                        newColName.append('_'.join(tuple([var, stat.__name__])))
+                PAVA_Result_Df = OrgDataAssignment.groupby('assignValue').agg(self.add_var_aggFunc).reset_index().fillna(0).sort_values(by='assignValue')
+                newColName = [self.var]
+                for var, stat in zip(self.add_var_aggFunc.keys(), self.add_var_aggFunc.values()) :
+                    if isinstance(stat, list) :
+                        for singlestat in stat :
+                            if callable(singlestat) : # a callable aggrgate function
+                                newColName.append('_'.join(tuple([var, singlestat.__name__])))
+                            else :
+                                newColName.append('_'.join(tuple([var, singlestat])))
                     else :
-                        newColName.append('_'.join(tuple([var, stat])))
-            PAVA_Result_Df.columns = newColName
-            PAVA_Final_Df = GCM.sort_values(by = 'intervalStart').rename(columns = {'intervalStart':self.var, self.metric : f'{self.response}_{self.metric}'})
-            PAVA_Result = PAVA_Result_Df.merge(PAVA_Final_Df, how = 'left', on = self.var)
-        else :
-            chosen_col_list = [self.var, self.response]
-            OrgDataAssignment = self.df_sel.copy()[chosen_col_list]
+                        if callable(stat) : # a callable aggrgate function
+                            newColName.append('_'.join(tuple([var, stat.__name__])))
+                        else :
+                            newColName.append('_'.join(tuple([var, stat])))
+                PAVA_Result_Df.columns = newColName
+                PAVA_Final_Df = GCM.sort_values(by = 'intervalStart').rename(columns = {'intervalStart':self.var, self.metric : f'{self.response}_{self.metric}'})
+                PAVA_Result = PAVA_Result_Df.merge(PAVA_Final_Df, how = 'left', on = self.var)
+            else :
+                chosen_col_list = [self.var, self.response]
+                OrgDataAssignment = self.df_sel.copy()[chosen_col_list]
+                OrgDataAssignment['assignValue'] = OrgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), 'intervalStart'].values[0], axis=1)
+                OrgDataAssignment['assignMetric'] = OrgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), self.metric].values[0], axis=1)
+
+                PAVA_Result = GCM.sort_values(by = 'intervalStart').rename(columns = {'intervalStart':self.var, self.metric : f'{self.response}_{self.metric}'})
+            #Generate final PAVA result (include additional var aggregation functions)
+            # create interval 
+            PAVA_Result.insert(1, column='intervalEnd)', value=PAVA_Result[self.var].shift(-1))
+            PAVA_Result.rename(columns = {self.var:'[intervalStart'}, inplace=True)
+            PAVA_Result.iloc[0, 0] = -np.inf #minimum interval start
+            PAVA_Result.iloc[-1, 1] = np.inf #maximum interval end
+            PAVA_Result = PAVA_Result.drop('intervalEnd', axis = 1)
+        else : # need optimal binning
+            OrgDataAssignment = self.df_sel.copy()[[self.var, self.response]]
             OrgDataAssignment['assignValue'] = OrgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), 'intervalStart'].values[0], axis=1)
             OrgDataAssignment['assignMetric'] = OrgDataAssignment.apply(lambda row: GCM.loc[(GCM['intervalStart'] <= row[self.var]) & (GCM['intervalEnd'] >= row[self.var]), self.metric].values[0], axis=1)
 
-            PAVA_Final_Df = GCM.sort_values(by = 'intervalStart').rename(columns = {'intervalStart':self.var, self.metric : f'{self.response}_{self.metric}'})
-            PAVA_Result = PAVA_Final_Df
-        #Generate final PAVA result (include additional var aggregation functions)
-        # create interval 
-        PAVA_Result.insert(1, column='intervalEnd)', value=PAVA_Result[self.var].shift(-1))
-        PAVA_Result.rename(columns = {self.var:'[intervalStart'}, inplace=True)
-        PAVA_Result.iloc[0, 0] = -np.inf #minimum interval start
-        PAVA_Result.iloc[-1, 1] = np.inf #maximum interval end
-        PAVA_Result = PAVA_Result.drop('intervalEnd', axis = 1)
+            PAVA_Result = GCM.sort_values(by = 'intervalStart').rename(columns = {'intervalStart':self.var, 
+                                                                                    self.metric : f'{self.response}_{self.metric}', 
+                                                                                    'std': f'{self.response}_std', 
+                                                                                    'count': f'{self.response}_count'})
+
+            #Generate final PAVA result (include additional var aggregation functions)
+            # create interval 
+            PAVA_Result.insert(1, column='intervalEnd)', value=PAVA_Result[self.var].shift(-1))
+            PAVA_Result.rename(columns = {self.var:'[intervalStart'}, inplace=True)
+            PAVA_Result.iloc[0, 0] = -np.inf #minimum interval start
+            PAVA_Result.iloc[-1, 1] = np.inf #maximum interval end
+            PAVA_Result = PAVA_Result.drop('intervalEnd', axis = 1)
+            
         '''
         OrgDataAssignment : original dataset but only select columns below 
         self.var | self.response | assignValue | assignMetric
@@ -242,7 +263,7 @@ class PAVA :
         self._CSD_Summary = CSD
         '''
         GCM : the result of the greatest convex minorant diagram that no data violates the convexity.
-        intervalStart | intervalEnd | self.metric
+        intervalStart | intervalEnd | self.metric (| self.std | self.count)
         ----------------------------------
         '''
         self._GCM_Summary = GCM
@@ -266,3 +287,79 @@ class PAVA :
             PAVA_Res_Series = var_column.apply(lambda row : self.PAV_Summary.loc[(self.PAV_Summary["[intervalStart"] <= row)&(self.PAV_Summary["intervalEnd)"] > row), "intervalEnd)"].values[0])
         
         return PAVA_Res_Series
+    
+    def setBinningConstraints(self, max_bins :int = np.inf, min_bins :int = 0, max_samples = np.inf, min_samples = 0, min_pos_term = None, init_pvalue: float = 0.4, maximize_bins :bool = True) -> None:
+        self._max_bins = max_bins
+        self._min_bins = min_bins
+        self._init_pvalue = init_pvalue
+        self._max_samples = max_samples
+        self._min_samples = min_samples
+        self._min_pos_term = min_pos_term
+        self._maximize_bins = maximize_bins
+        self._constraintsStatus = True
+
+    def runPAVOB(self, mergeMethod, sign = 'auto') :
+        if self._metric != 'mean' :
+            raise ValueError('Optimal Binning only supports metric = "mean" in order to run T-Tests.')
+        
+        PAVforOB = self.runPAVA(optimalBinning_required = True, sign = sign)
+        
+        monotable_for_OB  = PAVforOB.PAV_Summary.copy()
+        if self.constraintsStatus == False :
+            return PAVforOB
+        else :
+            if mergeMethod in ['Stats', 'Size'] :
+                
+                # Binning
+                OptimalBinningMerger = OptimalBinning(resMonotoneTable = monotable_for_OB, 
+                                                        max_bins = self.max_bins, min_bins = self.min_bins, 
+                                                        max_samples = self.max_samples, min_samples = self.min_samples, 
+                                                        min_bads = self.min_bads, init_pvalue = self.init_pvalue,
+                                                        maximize_bins = self.maximize_bins)
+                
+                finishBinningTable = OptimalBinningMerger.monoOptBinning(mergeMethod = mergeMethod)
+                finishBinningTable['[intervalStart'] = finishBinningTable['[intervalStart'].astype(str)
+                finishBinningTable['intervalEnd)'] = finishBinningTable['intervalEnd)'].astype(str)
+                self._finishBinningTable = finishBinningTable.rename(columns = {'intervalEnd)':'intervalEnd]'})
+                # Summary
+                if self.isNaExist and self.isExcValueExist : #contains missing and exclude value
+                    
+                    missingDF = pd.DataFrame({
+                        '[intervalStart' : ['Missing'],
+                        'intervalEnd)' : ['Missing'],
+                        'total' : [len(self.df_missing)],
+                        'bads' : [self.df_missing[self.response].sum()],
+                        'mean' : [(self.df_missing[self.response].sum()) / (len(self.df_missing))]})
+                        
+                    excludeValueDF = self.df_excvalue.groupby(self.var)[self.response].agg(['count', 'sum']).reset_index().fillna(0).rename(columns={self.var: '[intervalStart','count':'total', 'sum':'bads'})
+                    excludeValueDF['[intervalStart'] = excludeValueDF['[intervalStart'].astype(str)
+                    excludeValueDF.insert(1, 'intervalEnd)', excludeValueDF['[intervalStart'])
+                    excludeValueDF['mean'] = excludeValueDF['bads'] / excludeValueDF['total']
+                    
+                    completeBinningTable = pd.concat([finishBinningTable, missingDF, excludeValueDF], axis = 0, ignore_index = True)
+                elif self.isNaExist & ~self.isExcValueExist : # contains missing but no special values
+                    missingDF = pd.DataFrame({
+                        '[intervalStart' : ['Missing'],
+                        'intervalEnd)' : ['Missing'],
+                        'total' : [len(self.df_missing)],
+                        'bads' : [self.df_missing[self.response].sum()],
+                        'mean' : [(self.df_missing[self.response].sum()) / (len(self.df_missing))]})
+                    
+                    completeBinningTable = pd.concat([finishBinningTable, missingDF], axis = 0, ignore_index = True)
+                elif ~self.isNaExist & self.isExcValueExist : # contains special values but no missing data
+                    excludeValueDF = self.df_excvalue.groupby(self.var)[self.response].agg(['count', 'sum']).reset_index().fillna(0).rename(columns={self.var: '[intervalStart','count':'total', 'sum':'bads'})
+                    excludeValueDF['[intervalStart'] = excludeValueDF['[intervalStart'].astype(str)
+                    excludeValueDF.insert(1, 'intervalEnd', excludeValueDF['[intervalStart'])
+                    excludeValueDF['mean'] = excludeValueDF['bads'] / excludeValueDF['total']
+                    
+                    completeBinningTable = pd.concat([finishBinningTable, excludeValueDF], axis = 0, ignore_index = True)
+                else : # clean data with no missing and special values
+                    completeBinningTable = finishBinningTable
+                    
+                outputTable = self.__summarizeBins(FinalOptTable = completeBinningTable)
+                # intervalStart and intervalEnd is set as string due to the concatenation of missing and exclusive dataset
+                self._outputTable = outputTable
+            else :
+                raise ValueError('mergeMethod only supports {<Stats> | <Size>} so far.')
+                
+        return outputTable
