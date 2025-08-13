@@ -1,0 +1,37 @@
+# Core top-level files
+include README.md
+include LICENSE
+include pyproject.toml
+include requirements.txt
+include conda-env.yml
+
+# Package source (src/ layout)
+recursive-include src *.py
+
+# Examples and data
+recursive-include examples *.py
+recursive-include data *.csv *.txt
+
+# Tests (optional but useful for source dists)
+recursive-include tests *.py
+
+# Type hints (if you add one later)
+include src/MOBPY/py.typed
+
+# Prune common transient directories
+prune .git
+prune .github
+prune .venv
+prune build
+prune dist
+prune .pytest_cache
+prune .mypy_cache
+prune .idea
+prune .vscode
+
+# Exclude compiled and cache files
+global-exclude __pycache__/*
+global-exclude *.py[cod]
+global-exclude *.so
+global-exclude .DS_Store
+global-exclude .ipynb_checkpoints
