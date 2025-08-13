@@ -7,15 +7,15 @@ if TYPE_CHECKING:
     import matplotlib.pyplot as plt  # pragma: no cover
 else:
     import matplotlib  # type: ignore[import-not-found]
-    matplotlib.use("Agg")  # safe no-op if already set
+    matplotlib.use("Agg")  # safe in headless CI
     import matplotlib.pyplot as plt  # type: ignore[import-not-found]
-    
+
 import numpy as np
 import pandas as pd
 
 
 class MOBPlot:
-    """Static plotting utilities for MOB-style summaries."""
+    """Static plotting utilities for MOB-style summaries (binary targets)."""
 
     @staticmethod
     def plot_bins_summary(
@@ -23,7 +23,7 @@ class MOBPlot:
         *,
         figsize=(12, 7),
         dpi: int = 120,
-        bar_alpha: float = 0.55,
+        bar_alpha: float = 0.6,
         bar_width: float = 0.6,
         annotate: bool = True,
         title: str | None = None,
@@ -32,14 +32,14 @@ class MOBPlot:
         """Plot WoE bars + bad-rate line from a MOB-style summary.
 
         Args:
-            summary: DataFrame returned by `MonotonicBinner.summary_()` when `y` is binary.
+            summary: DataFrame from `MonotonicBinner.summary_()` (binary y).
                      Must contain:
                        ['interval','nsamples','bads','goods','bad_rate','woe','iv_grp']
             figsize: Figure size in inches.
             dpi: Matplotlib DPI.
             bar_alpha: Alpha for WoE bars.
             bar_width: Width of bars.
-            annotate: If True, annotate WoE bars with sample proportions and dots with bad-rate.
+            annotate: If True, annotate WoE bars with sample proportions.
             title: Optional title string; defaults to total IV.
             savepath: Optional path to save the figure.
 
@@ -53,7 +53,7 @@ class MOBPlot:
 
         df = summary.copy().reset_index(drop=True)
 
-        # Numeric bins: those with finite left/right (Missing/Excluded have NaN edges)
+        # Numeric bins: those with finite left/right (skip Missing/Excluded)
         numeric = df[df["interval"].notna() & df["left"].notna() & df["right"].notna()].copy()
         if numeric.empty:
             raise ValueError("No numeric bins found to plot.")
@@ -64,7 +64,7 @@ class MOBPlot:
         bad_rate = numeric["bad_rate"].to_numpy(dtype=float)
 
         fig, ax1 = plt.subplots(figsize=figsize, dpi=dpi)
-        bars = ax1.bar(x, woe, width=bar_width, alpha=bar_alpha)
+        bars = ax1.bar(x, woe, width=bar_width, alpha=bar_alpha, label="WoE")
         ax1.axhline(0.0, linewidth=1)
         ax1.set_xticks(x, intervals, rotation=0)
         ax1.set_ylabel("WoE")
@@ -80,11 +80,17 @@ class MOBPlot:
                 ax1.text(xi, h + yoff, f"{d:.1%}", ha="center", va=va, fontsize=9)
 
         ax2 = ax1.twinx()
-        ax2.plot(x, bad_rate, marker="o")
+        ax2.plot(x, bad_rate, marker="o", label="Bad Rate")
         ax2.set_ylabel("Bad Rate")
 
         iv_total = float(numeric["iv_grp"].sum())
         ax1.set_title(title or f"Bins Summary (IV = {iv_total:.4f})")
+
+        # combine legends from both axes
+        lines_labels = [ax.get_legend_handles_labels() for ax in [ax1, ax2]]
+        lines, labels = [sum(lol, []) for lol in zip(*lines_labels)]
+        if lines and labels:
+            ax1.legend(lines, labels, loc="best")
 
         fig.tight_layout()
         if savepath:

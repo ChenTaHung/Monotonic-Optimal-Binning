@@ -1,79 +1,126 @@
-#!/usr/bin/env python
-from __future__ import annotations
+# demo_mobpy_german.py
+import os
+from pathlib import Path
+import math
 
-import argparse
-import pathlib
-from typing import List, Optional
-
+import numpy as np
 import pandas as pd
 
-from MOBPY.core.constraints import BinningConstraints
 from MOBPY.binning.mob import MonotonicBinner
-from MOBPY.plot.mob_plot import MOBPlot
-from MOBPY.plot.csd_gcm import plot_csd_gcm_from_binner
+from MOBPY.core.constraints import BinningConstraints
+from MOBPY.plot.csd_gcm import (
+    plot_csd_gcm,
+    plot_gcm_from_binner,
+    animate_pava_from_binner,
+)
 
+# -----------------------------------------------------------------------------
+# 0) Paths
+# -----------------------------------------------------------------------------
+REPO = Path("/Users/chentahung/Desktop/git/mob-py").resolve()
+DATA1 = REPO / "data" / "german_data_credit_cat.csv"  # if present
+IMG_DIR = REPO / "doc" / "images"
+GIF_DIR = IMG_DIR / "gif"
+IMG_DIR.mkdir(parents=True, exist_ok=True)
+GIF_DIR.mkdir(parents=True, exist_ok=True)
 
-def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Run monotone optimal binning (MOB) demo.")
-    p.add_argument("--csv", type=str, default="data/german_data_credit_cat.csv",
-                   help="Path to german_data_credit_cat.csv (default: data/german_data_credit_cat.csv)")
-    p.add_argument("--x", type=str, default="Durationinmonth", help="Feature/variable to bin.")
-    p.add_argument("--y", type=str, default="default", help="Response column (binary for MOB).")
-    p.add_argument("--exclude", action="append", default=None,
-                   help="Values in x to treat as special bins. Use multiple flags for multiple values.")
-    p.add_argument("--max-bins", type=int, default=6, help="Maximum number of bins.")
-    p.add_argument("--min-bins", type=int, default=4, help="Minimum number of bins (only used if maximize is false).")
-    p.add_argument("--max-samples", type=float, default=0.4, help="Per-bin cap. Fraction (0,1] or int; None to disable.")
-    p.add_argument("--min-samples", type=float, default=0.05, help="Per-bin floor. Fraction [0,1) or int; 0 to disable.")
-    p.add_argument("--min-positives", type=float, default=0.05, help="Binary only: per-bin positives min. Fraction or int; 0 to disable.")
-    p.add_argument("--p0", type=float, default=0.4, help="Initial p-value threshold.")
-    p.add_argument("--maximize", action="store_true", default=True, help="If set, enforce <= max-bins (default).")
-    p.add_argument("--no-maximize", dest="maximize", action="store_false", help="Use min-bins regime instead.")
-    p.add_argument("--plot", action="store_true", help="Render plots (saved to ./_out).")
-    return p.parse_args()
+# -----------------------------------------------------------------------------
+# 1) Load data (German credit if available, else synthetic)
+# -----------------------------------------------------------------------------
+if DATA1.exists():
+    df = pd.read_csv(DATA1)
+    # German dataset note: target is (default - 1) -> {0,1}
+    df["default"] = (df["default"] - 1).clip(lower=0, upper=1).astype(int)
+    x_col = "credit_amount" if "credit_amount" in df.columns else df.select_dtypes("number").columns[0]
+    y_col = "default"
+else:
+    # Synthetic binary demo
+    rng = np.random.default_rng(7)
+    n = 800
+    x = np.linspace(-2.0, 3.0, n) + rng.normal(0, 0.25, n)
+    p = 1.0 / (1.0 + np.exp(-1.3 * x))
+    y = rng.binomial(1, p)
+    df = pd.DataFrame({"x": x, "y": y})
+    x_col, y_col = "x", "y"
 
+print(f"Using x={x_col!r}, y={y_col!r}; rows={len(df)}")
 
-def main() -> None:
-    args = parse_args()
+# -----------------------------------------------------------------------------
+# 2) Set constraints & fit binner
+# -----------------------------------------------------------------------------
+cons = BinningConstraints(
+    max_bins=6,
+    min_bins=2,
+    min_samples=0.05,   # 5% of clean rows per bin (auto-resolved)
+    initial_pvalue=0.4, # merge threshold (simple two-sample test heuristic)
+    maximize_bins=True, # classic MOB: don't exceed max_bins
+)
 
-    # Load CSV and adapt 'default' to {0,1} as per your legacy script
-    df = pd.read_csv(args.csv)
-    if args.y in df.columns and df[args.y].dropna().nunique() == 2 and set(df[args.y].unique()) == {1, 2}:
-        df[args.y] = df[args.y] - 1
+binner = MonotonicBinner(
+    df=df,
+    x=x_col,
+    y=y_col,
+    metric="mean",          # (future work: median; currently mean-only)
+    sign="auto",            # infer monotone direction
+    strict=True,            # merge plateaus during PAVA
+    constraints=cons,
+    exclude_values=None,    # e.g., special codes to exclude as their own rows
+).fit()
 
-    # Constraints
-    cons = BinningConstraints(
-        max_bins=args.max_bins,
-        min_bins=args.min_bins,
-        max_samples=args.max_samples,
-        min_samples=args.min_samples,
-        min_positives=args.min_positives,
-        initial_pvalue=args.p0,
-        maximize_bins=args.maximize,
+# -----------------------------------------------------------------------------
+# 3) Inspect results
+# -----------------------------------------------------------------------------
+bins = binner.bins_()
+summary = binner.summary_()
+print("\n=== Clean bins (first 5) ===")
+print(bins.head())
+print("\n=== Full summary (first 5) ===")
+print(summary.head())
+
+# Check coverage convention: first left is -inf, last right is +inf
+first_left = bins["left"].iloc[0]
+last_right = bins["right"].iloc[-1]
+assert math.isinf(first_left) and first_left < 0
+assert math.isinf(last_right) and last_right > 0
+
+# -----------------------------------------------------------------------------
+# 4) Plots
+# -----------------------------------------------------------------------------
+# 4a) CSD-like group means + PAVA step (x–y plane)
+plot_csd_gcm(
+    groups_df=binner._pava.groups_,
+    blocks=binner._pava.export_blocks(as_dict=True),
+    x_name=x_col,
+    y_name=y_col,
+    savepath=str(IMG_DIR / "csd_pava_step.png"),
+)
+
+# 4b) GCM (Greatest Convex Minorant) on the Cumulative Sum Diagram
+plot_gcm_from_binner(
+    binner,
+    savepath=str(IMG_DIR / "gcm_on_csd.png"),
+)
+
+# 4c) MOB summary plot (WoE bars + bad-rate line) — only for binary y
+if getattr(binner, "_is_binary_y", False):
+    from MOBPY.plot.mob_plot import MOBPlot
+    MOBPlot.plot_bins_summary(
+        binner.summary_(),
+        savepath=str(IMG_DIR / "mob_summary.png"),
     )
+    print("Saved: mob_summary.png")
+else:
+    print("Non-binary target: skipping WoE/IV summary plot.")
 
-    # Fit binner
-    binner = MonotonicBinner(
-        df=df, x=args.x, y=args.y,
-        metric="mean", sign="auto",
-        constraints=cons,
-        exclude_values=args.exclude,
-    ).fit()
+print("Saved: csd_pava_step.png, gcm_on_csd.png")
 
-    print("\n=== CLEAN BINS ===")
-    print(binner.bins_())
-
-    print("\n=== FULL SUMMARY ===")
-    print(binner.summary_())
-
-    # Optional plots
-    if args.plot:
-        out_dir = pathlib.Path("_out")
-        out_dir.mkdir(exist_ok=True)
-        MOBPlot.plot_bins_summary(binner.summary_(), savepath=str(out_dir / "bins_summary.png"))
-        plot_csd_gcm_from_binner(binner, savepath=str(out_dir / "csd_gcm.png"))
-        print(f"\nSaved plots in: {out_dir.resolve()}")
-
-
-if __name__ == "__main__":
-    main()
+# -----------------------------------------------------------------------------
+# 5) Animation: PAVA merges → evolving GCM (GIF)
+# -----------------------------------------------------------------------------
+animate_pava_from_binner(
+    binner,
+    savepath=str(GIF_DIR / "pava_gcm.gif"),
+    fps=1.25,
+    annotate_slopes=True,
+)
+print("Saved GIF:", GIF_DIR / "pava_gcm.gif")

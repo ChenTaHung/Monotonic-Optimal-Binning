@@ -11,16 +11,18 @@ from .utils import ensure_numeric_series
 
 @dataclass
 class _Block:
-    """Internal PAVA block with sufficient statistics.
+    """Internal block used by PAVA (mean-only).
+
+    Stores sufficient statistics so merges are O(1).
 
     Attributes:
-        left: Left (inclusive) edge.
-        right: Right (exclusive) edge.
+        left: Left (inclusive) edge in x-domain.
+        right: Right (exclusive) edge in x-domain.
         n: Count of observations.
         sum: Sum of y.
         sum2: Sum of y**2 (for variance).
-        ymin: Minimum y.
-        ymax: Maximum y.
+        ymin: Minimum y in the block.
+        ymax: Maximum y in the block.
     """
     left: float
     right: float
@@ -30,13 +32,15 @@ class _Block:
     ymin: float
     ymax: float
 
+    # ---- derived stats ----------------------------------------------------- #
+
     @property
     def mean(self) -> float:
         return 0.0 if self.n == 0 else self.sum / self.n
 
     @property
     def var(self) -> float:
-        """Unbiased sample variance from aggregated stats."""
+        """Unbiased sample variance from aggregated stats (>= 0)."""
         if self.n <= 1:
             return 0.0
         return max((self.sum2 - (self.sum ** 2) / self.n) / (self.n - 1), 0.0)
@@ -46,45 +50,55 @@ class _Block:
         return float(np.sqrt(self.var))
 
     def as_dict(self) -> dict:
-        return dict(left=self.left, right=self.right, n=self.n, sum=self.sum, sum2=self.sum2, ymin=self.ymin, ymax=self.ymax)
+        """Safe export: plain-Python dict (no references)."""
+        return dict(
+            left=float(self.left), right=float(self.right),
+            n=int(self.n), sum=float(self.sum), sum2=float(self.sum2),
+            ymin=float(self.ymin), ymax=float(self.ymax)
+        )
+
+    # ---- merge ------------------------------------------------------------- #
 
     def merge_with(self, other: "_Block") -> "_Block":
-        """Return a new block equal to the union of self and other (adjacent)."""
+        """Return a new block equal to the union of self and other."""
         n = self.n + other.n
         s = self.sum + other.sum
         s2 = self.sum2 + other.sum2
         ymin = min(self.ymin, other.ymin)
         ymax = max(self.ymax, other.ymax)
+        # IMPORTANT: Preserve the LEFT of the left block and RIGHT of the right block.
+        # If the first block starts at -inf and/or the last at +inf, that persists.
         return _Block(left=self.left, right=other.right, n=n, sum=s, sum2=s2, ymin=ymin, ymax=ymax)
 
 
 VALID_SORT_KINDS = (None, "quicksort", "mergesort", "heapsort", "stable")
 
+
 class PAVA:
-    """Pool-Adjacent Violators Algorithm for monotone means on grouped x.
+    """Pool-Adjacent-Violators Algorithm for isotonic regression (mean-only).
 
-    Implementation notes:
-      * We sort by `x`, group to atomic blocks (one per unique x),
-        then pool adjacent blocks while monotonicity is violated.
-      * The structure is logically equivalent to your original
-        double-linked list approach, but we use a simple **stack**:
-        push each block; while the top two violate, pop & merge, push back.
+    Pipeline (vectorized + stack-based):
 
-    Only `metric="mean"` is supported here (MOB special case).
+      1) Drop rows with missing x or y.
+      2) Sort by x (configurable `sort_kind`) once, then groupby(sort=False).
+      3) Build one initial block per unique x with sufficient stats.
+         **We expand domain coverage so the first block starts at -inf
+         and the last block ends at +inf**.
+      4) Run the classic PAVA stack: push each block, while the last two violate
+         monotonicity under the resolved sign, merge them.
+      5) Record **history frames** after each structural change (push/merge).
+         This enables animations / step-by-step visuals.
+
+    Only `metric="mean"` is supported (median/quantiles are future work).
 
     Args:
         df: Input DataFrame.
-        x: Column name (feature being binned).
-        y: Column name (target or metric column).
-        metric: Must be `"mean"`.
-        sign: `"+"`, `"-"`, or `"auto"`.
-        strict: If True, equal-means plateaus are merged (strict monotone).
-        sort_kind: Sorting algorithm used before groupby (see pandas `sort_values(kind=...)`).
-
-    Raises:
-        KeyError: If required columns missing.
-        TypeError/ValueError: If `y` is not numeric/finite on clean rows.
-        ValueError: If no clean rows exist after dropping missing x or y.
+        x: Column name of the feature to bin.
+        y: Column name of the response/target.
+        metric: Must be "mean".
+        sign: "+", "-", or "auto" (infer sign from corr between x and group means).
+        strict: If True, merge equal-mean plateaus to enforce *strict* monotone.
+        sort_kind: pandas sort kind used by `DataFrame.sort_values`.
     """
 
     def __init__(
@@ -99,128 +113,145 @@ class PAVA:
         sort_kind: Optional[str] = "quicksort",
     ):
         if metric != "mean":
-            raise ValueError("PAVA currently supports only metric='mean'.")
+            # Mean-only implementation; median/quantiles are future work.
+            raise ValueError("Only metric='mean' is supported at this time.")
+
+        if sort_kind not in VALID_SORT_KINDS:
+            raise ValueError(f"sort_kind must be one of {VALID_SORT_KINDS}, got {sort_kind!r}")
+
         self.df = df
         self.x = x
         self.y = y
         self.metric = metric
         self.sign = sign
         self.strict = strict
-
-        if sort_kind not in VALID_SORT_KINDS:
-            raise ValueError(f"sort_kind must be one of {VALID_SORT_KINDS}, got {sort_kind!r}")
         self.sort_kind = sort_kind
 
-        self.blocks_: List[_Block] = []
+        # Fitted artifacts
+        self.blocks_: List[_Block] = []           # final monotone blocks (x-domain, first left = -inf, last right = +inf)
         self.groups_: Optional[pd.DataFrame] = None
         self.resolved_sign_: Literal["+", "-"] | None = None
 
-    # ------------------------------------------------------------------ #
-    # Public API
-    # ------------------------------------------------------------------ #
+        # History: list of frames; each frame is a list of exported dict blocks
+        # representing the *current* stack state (in x-domain).
+        self.history_: List[List[dict]] = []
+
+    # --------------------------------------------------------------------- #
+    # public API
+    # --------------------------------------------------------------------- #
 
     def fit(self) -> "PAVA":
-        """Run PAVA on grouped/ordered data and cache blocks."""
+        """Run PAVA on grouped & ordered data; populate blocks_ and history_.
 
-        # Validate columns
+        Returns:
+            Self.
+
+        Raises:
+            KeyError: If x or y is missing in df.
+            TypeError/ValueError: For non-numeric or non-finite y on clean rows.
+            ValueError: If no rows after dropping rows with missing x or y.
+        """
         if self.x not in self.df.columns or self.y not in self.df.columns:
             missing = [c for c in (self.x, self.y) if c not in self.df.columns]
             raise KeyError(f"Missing columns in df: {missing}")
 
-        # PAVA runs on **clean** rows only
+        # Clean partition for PAVA (missing x or y are excluded here)
         sub = self.df[[self.x, self.y]].dropna()
         if sub.empty:
             raise ValueError("No rows with non-missing x and y for PAVA.")
 
-        # y must be numeric and finite
         ensure_numeric_series(sub[self.y], self.y)
 
-        # ---- sort first with desired algorithm, then groupby(sort=False) ----
+        # Sort once, then group in that order (stable behavior across pandas)
         if self.sort_kind is None:
-            sub_sorted = self.df[[self.x, self.y]].dropna().sort_values(
-                by=self.x, na_position="last"
-            )
+            sub_sorted = sub.sort_values(by=self.x, na_position="last")
         else:
-            sub_sorted = self.df[[self.x, self.y]].dropna().sort_values(
-                by=self.x, kind=self.sort_kind, na_position="last"
-            )
-
+            sub_sorted = sub.sort_values(by=self.x, kind=self.sort_kind, na_position="last")
         gb = sub_sorted.groupby(self.x, sort=False)[self.y]
 
-        # Aggregate per unique x
+        # Aggregate per unique x (sufficient statistics)
         counts = gb.count().to_numpy(dtype=np.int64)
         sums = gb.sum().to_numpy(dtype=float)
-        # Sum of squares for pooled variance
         sums2 = gb.apply(lambda s: np.square(s.to_numpy(dtype=float)).sum()).to_numpy(dtype=float)
         mins = gb.min().to_numpy(dtype=float)
         maxs = gb.max().to_numpy(dtype=float)
-        xs = gb.mean().index.to_numpy(dtype=float)  # index = sorted unique x
+        xs = gb.mean().index.to_numpy(dtype=float)  # sorted unique x
 
-        # groups_ mirrors your original CSD table (columns renamed per current code)
+        # Cache groups for downstream plotting & sign inference
         self.groups_ = pd.DataFrame(
             {"x": xs, "count": counts, "sum": sums, "sum2": sums2, "ymin": mins, "ymax": maxs}
         )
 
-        # Resolve monotone direction
+        # Resolve sign
         if self.sign in {"+", "-"}:
             resolved_sign = self.sign
         else:
-            # Infer direction from correlation of x vs. group means,
-            # but avoid corrcoef when one vector is constant (std == 0)
-            xs = self.groups_["x"].to_numpy(dtype=float)
-            means_by_x = (self.groups_["sum"] / self.groups_["count"]).to_numpy(dtype=float)
-
-            if len(xs) <= 1 or np.std(xs) == 0.0 or np.std(means_by_x) == 0.0:
-                corr = 1.0  # treat as non-decreasing (also avoids warnings)
-            else:
-                corr = float(np.corrcoef(xs, means_by_x)[0, 1])
-
-            resolved_sign = "+" if corr >= 0 else "-"
+            # Infer from corr(x, group mean); default to '+' if len==1 or NaN
+            means_by_x = self.groups_["sum"] / self.groups_["count"].clip(lower=1)
+            corr = np.corrcoef(self.groups_["x"], means_by_x)[0, 1] if len(self.groups_) > 1 else 1.0
+            resolved_sign = "+" if (corr >= 0 or np.isnan(corr)) else "-"
         self.resolved_sign_ = resolved_sign
 
-        # One block per unique x (convert right edge to next x)
-        blocks: List[_Block] = []
-        for _, row in self.groups_.iterrows():
-            blocks.append(
-                _Block(
-                    left=float(row["x"]),
-                    right=float(row["x"]),  # temp; set below
-                    n=int(row["count"]),
-                    sum=float(row["sum"]),
-                    sum2=float(row["sum2"]),
-                    ymin=float(row["ymin"]),
-                    ymax=float(row["ymax"]),
-                )
-            )
+        # Build initial x-domain blocks with:
+        #   - first block LEFT = -inf (domain coverage to the left),
+        #   - interior blocks left = unique x,
+        #   - last block RIGHT = +inf (domain coverage to the right).
+        init_blocks: List[_Block] = []
+        k = len(xs)
+        if k == 1:
+            # Single unique value: one infinite block around it.
+            init_blocks.append(_Block(
+                left=float("-inf"),
+                right=float("inf"),
+                n=int(counts[0]), sum=float(sums[0]), sum2=float(sums2[0]),
+                ymin=float(mins[0]), ymax=float(maxs[0]),
+            ))
+        else:
+            for i in range(k):
+                if i == 0:
+                    left = float("-inf")
+                    right = float(xs[i + 1])
+                elif i == k - 1:
+                    left = float(xs[i])
+                    right = float("inf")
+                else:
+                    left = float(xs[i])
+                    right = float(xs[i + 1])
+                init_blocks.append(_Block(
+                    left=left, right=right,
+                    n=int(counts[i]), sum=float(sums[i]), sum2=float(sums2[i]),
+                    ymin=float(mins[i]), ymax=float(maxs[i]),
+                ))
 
-        # Right edge = next unique x; last is +inf for clean searchsorted
-        xs = self.groups_["x"].to_numpy(dtype=float)
-        for i in range(len(blocks) - 1):
-            blocks[i].right = xs[i + 1]
-        blocks[-1].right = float("inf")
-        # NEW: open the first bin to -inf so coverage is full range
-        blocks[0].left = float("-inf")
-        
-        # Stack-based pooling (equiv to DLL merging from your original design)
+        # PAVA stack with history snapshots
         stack: List[_Block] = []
-        for b in blocks:
+        self.history_.clear()
+
+        def snapshot():
+            """Record a copy of the current stack as dicts (for animation)."""
+            self.history_.append([b.as_dict() for b in stack])
+
+        for b in init_blocks:
             stack.append(b)
-            # While the top two violate monotonicity → merge them
+            snapshot()  # after push, before any merges
+
+            # Merge while the last two violate monotonicity (or strict plateau)
             while len(stack) >= 2:
                 b2 = stack[-1]
                 b1 = stack[-2]
+
                 if self._violates(b1, b2, resolved_sign):
                     merged = b1.merge_with(b2)
-                    stack.pop()
-                    stack.pop()
+                    stack.pop(); stack.pop()
                     stack.append(merged)
+                    snapshot()
                 else:
-                    # If strict, collapse plateaus (equal means) as well
+                    # Optional plateau merge to enforce *strict* monotone
                     if self.strict and abs(b2.mean - b1.mean) <= 1e-12:
                         merged = b1.merge_with(b2)
-                        stack.pop()
-                        stack.pop()
+                        stack.pop(); stack.pop()
                         stack.append(merged)
+                        snapshot()
                     else:
                         break
 
@@ -228,18 +259,50 @@ class PAVA:
         return self
 
     def export_blocks(self, as_dict: bool = True) -> List[dict] | List[Tuple]:
-        """Export fitted blocks as safe primitives (dicts or tuples)."""
+        """Export final monotone blocks.
+
+        Args:
+            as_dict: If True, returns list of dicts (primitive types).
+                     If False, returns list of tuples
+                     (left,right,n,sum,sum2,ymin,ymax).
+
+        Returns:
+            List of exported blocks.
+        """
         if as_dict:
             return [b.as_dict() for b in self.blocks_]
         return [(b.left, b.right, b.n, b.sum, b.sum2, b.ymin, b.ymax) for b in self.blocks_]
 
-    # ------------------------------------------------------------------ #
-    # Helpers
-    # ------------------------------------------------------------------ #
+    def export_history(self, as_dict: bool = True) -> List[List[dict]] | List[List[Tuple]]:
+        """Export the recorded PAVA history frames.
+
+        Each frame represents the stack after a push/merge step.
+
+        Args:
+            as_dict: If True, each frame is a list of dict blocks;
+                     otherwise, lists of tuples.
+
+        Returns:
+            List of frames.
+        """
+        if as_dict:
+            # Already stored as dicts; return a deep copy to be safe.
+            return [[{**d} for d in frame] for frame in self.history_]
+        out: List[List[Tuple]] = []
+        for frame in self.history_:
+            out.append([(d["left"], d["right"], d["n"], d["sum"], d["sum2"], d["ymin"], d["ymax"]) for d in frame])
+        return out
+
+    # --------------------------------------------------------------------- #
+    # helpers
+    # --------------------------------------------------------------------- #
 
     @staticmethod
     def _violates(b1: _Block, b2: _Block, sign: Literal["+", "-"]) -> bool:
-        """Return True if the pair (b1,b2) violates monotonicity for `sign`."""
+        """Return True if (b1, b2) violates monotonicity for the given sign.
+
+        We allow a tiny tolerance (1e-12) for floating error.
+        """
         if sign == "+":
             return b2.mean < b1.mean - 1e-12
         else:
