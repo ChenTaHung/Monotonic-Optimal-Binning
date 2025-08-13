@@ -1,121 +1,209 @@
-import matplotlib.pyplot as plt
-import pandas as pd
+# src/MOBPY/plot/mob_plot.py
+"""
+Plot helpers for monotone bins (MOB/PAVA outputs).
+
+This module provides a small, dependency-light plotting utility that accepts the
+DataFrame returned by `MonotonicBinner.summary_()` (recommended) or, with minor
+limitations, `MonotonicBinner.bins_()`.
+
+Primary chart
+-------------
+- `plot_bins_summary(df, ...)`:
+    - Bars: WoE (if binary) or observations share (fallback)
+    - Line: bad rate (binary) or mean (numeric)
+    - X-axis: interval labels in left-closed, right-open form "[a, b)"
+
+Robustness & compatibility
+--------------------------
+- Accepts either full summary (includes WoE/IV) or just clean bins.
+- If WoE is missing (numeric targets), bars fallback to `dist_obs`.
+- Validates required columns and raises helpful ValueError messages.
+
+Example
+-------
+>>> from MOBPY.plot.mob_plot import MOBPlot
+>>> df = binner.summary_()  # from MonotonicBinner.fit().summary_()
+>>> MOBPlot.plot_bins_summary(df, title="Duration in Month")
+"""
+
+from __future__ import annotations
+
+from typing import Optional
+
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
-class MOB_PLOT :
-        
+
+class MOBPlot:
+    """Static plotting helpers for MOB/PAVA outputs."""
+
     @staticmethod
-    def plotBinsSummary(monoOptBinTable, bar_fill = 'skyblue', bar_alpha = 0.5, bar_width = 0.5, bar_text_color = 'darkblue', 
-                        line_color = 'orange', line_width = 3, dot_color = 'red', dot_size = 80, annotation_font_weight = 'bold', 
-                        figsavePath: str = None , dpi:int = 300):
-        
-        fig, ax1 = plt.subplots(1,1,figsize = (12,8))
-        binSummaryTable = monoOptBinTable.copy()
-        var_name = binSummaryTable.index.name        
-        binSummaryTable['interval'] = '[' + binSummaryTable['[intervalStart'].astype(str) + ' , ' + binSummaryTable['intervalEnd)'].astype(str) + ')'
-        binSummaryTable.loc[0, 'interval'] = binSummaryTable.loc[0, 'interval'].replace('[', '(')
-        # Plot bar chart for 'dist_obs'
-        bars = ax1.bar(np.arange(len(binSummaryTable['interval'])), binSummaryTable['woe'], color = bar_fill, alpha = bar_alpha, width = bar_width)
-        ax1.set_xticks(ticks = np.arange(len(binSummaryTable['interval'])), labels = binSummaryTable['interval'])
-        ax1.axhline(0)
-        ax1.set_xlabel('Interval End Value')
-        ax1.set_ylabel('WoE', color = bar_text_color)
+    def _ensure_interval_columns(df: pd.DataFrame) -> pd.DataFrame:
+        """Ensure the frame has a string interval label column.
 
-        # Add text
-        for i, bar in enumerate(bars):
-            height = bar.get_height()
-            if height >= 0 :
-                ax1.annotate(f'{binSummaryTable["dist_obs"].iloc[i]:.1%}', xy=(bar.get_x() + bar.get_width() / 2, height),
-                            xytext=(0, 10), textcoords='offset points', ha='center', va='top', weight = annotation_font_weight, c = bar_text_color)
-            else :
-                ax1.annotate(f'{binSummaryTable["dist_obs"].iloc[i]:.1%}', xy=(bar.get_x() + bar.get_width() / 2, height),
-                            xytext=(0, -8), textcoords='offset points', ha='center', va='top', weight = annotation_font_weight, c = bar_text_color)
+        Strategy:
+            - If '[intervalStart' and 'intervalEnd)' exist, build 'interval' from them.
+            - Else if 'left'/'right' exist, build from numeric edges.
+            - Else, require an existing 'interval' string column.
+
+        Returns:
+            A shallow copy of `df` with an 'interval' column.
+
+        Raises:
+            ValueError: if interval information is not present.
+        """
+        out = df.copy()
+        if "[intervalStart" in out.columns and "intervalEnd)" in out.columns:
+            # Already string-like in summary_
+            lefts = out["[intervalStart"].astype(str).to_numpy()
+            rights = out["intervalEnd)"].astype(str).to_numpy()
+            labels = np.array([f"[{l}, {r})" for l, r in zip(lefts, rights)], dtype=object)
+            # legacy: first interval uses "(" if it's -inf; keep consistent with input
+            labels[0] = labels[0].replace("[", "(") if "-inf" in labels[0] else labels[0]
+            out["interval"] = labels
+            return out
+
+        if "left" in out.columns and "right" in out.columns:
+            lefts = out["left"].to_numpy()
+            rights = out["right"].to_numpy()
+            labels = np.array([f"[{l}, {r})" for l, r in zip(lefts, rights)], dtype=object)
+            # if first left is -inf, render with "("
+            if len(labels) and np.isneginf(lefts[0]):
+                labels[0] = labels[0].replace("[", "(")
+            out["interval"] = labels
+            return out
+
+        if "interval" in out.columns:
+            return out
+
+        raise ValueError(
+            "Cannot construct interval labels. Expected columns "
+            "`['[intervalStart','intervalEnd)']` or `['left','right']` or an "
+            "existing 'interval' column."
+        )
+
+    @staticmethod
+    def _is_binary_summary(df: pd.DataFrame) -> bool:
+        """Heuristic: summary contains MOB columns if WoE is present."""
+        return "woe" in df.columns or "bads" in df.columns or "rate" in df.columns
+
+    @staticmethod
+    def plot_bins_summary(
+        df: pd.DataFrame,
+        *,
+        title: Optional[str] = None,
+        figsave_path: Optional[str] = None,
+        dpi: int = 300,
+        bar_alpha: float = 0.5,
+        bar_width: float = 0.5,
+    ) -> None:
+        """Plot a compact summary of bins.
+
+        Bars show WoE (if available) or distribution of observations as a fallback.
+        Line shows bad rate (binary) or mean (numeric).
+
+        Args:
+            df: DataFrame from `MonotonicBinner.summary_()` (preferred) or `bins_()`.
+            title: Optional chart title; if None, a sensible default is used.
+            figsave_path: Optional path to save the figure.
+            dpi: Save DPI if `figsave_path` is provided.
+            bar_alpha: Alpha (opacity) for bars.
+            bar_width: Width of bars.
+
+        Raises:
+            ValueError: If the input does not contain the necessary columns.
+        """
+        if not isinstance(df, pd.DataFrame):
+            raise ValueError("`df` must be a pandas DataFrame.")
+
+        # Work on a copy and ensure interval labels exist
+        data = MOBPlot._ensure_interval_columns(df)
+
+        # Deduce whether we have binary-style output (WoE, bad rate)
+        is_binary = MOBPlot._is_binary_summary(data)
+
+        # Choose series to plot
+        # Bars prefer WoE when available; otherwise fallback to distribution of obs.
+        if is_binary and "woe" in data.columns:
+            bar_series = data["woe"].astype(float)
+            bar_label = "WoE"
+        else:
+            # fallback: dist of observations if present; else compute from 'n'
+            if "dist_obs" in data.columns:
+                bar_series = data["dist_obs"].astype(float)
+            elif "n" in data.columns:
+                n = data["n"].astype(float)
+                bar_series = n / n.sum() if n.sum() > 0 else n * np.nan
+            else:
+                raise ValueError("Cannot determine bar series: need 'woe' or 'dist_obs' or 'n'.")
+            bar_label = "Obs. share"
+
+        # Line series: bad rate (binary) or mean (numeric)
+        if is_binary and "rate" in data.columns:
+            line_series = data["rate"].astype(float)
+            line_label = "Bad rate"
+        elif "mean" in data.columns:
+            line_series = data["mean"].astype(float)
+            line_label = "Mean"
+        else:
+            raise ValueError("Cannot determine line series: need 'rate' (binary) or 'mean'.")
+
+        # X labels
+        labels = data["interval"].astype(str).to_list()
+        x = np.arange(len(labels))
+
+        # Create plot
+        fig, ax1 = plt.subplots(1, 1, figsize=(12, 8))
+        bars = ax1.bar(x, bar_series.to_numpy(), width=bar_width, alpha=bar_alpha)
+        ax1.set_xticks(x, labels, rotation=0)
+        ax1.axhline(0, linewidth=1)
+        ax1.set_ylabel(bar_label)
+
+        # Annotate bar with obs share if available
+        if "dist_obs" in data.columns:
+            dist = data["dist_obs"].astype(float).to_numpy()
+            for i, bar in enumerate(bars):
+                height = bar.get_height()
+                if np.isnan(height):
+                    continue
+                # Position text above/below depending on sign
+                y_off = 10 if height >= 0 else -8
+                ax1.annotate(
+                    f"{dist[i]:.1%}",
+                    xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0, y_off),
+                    textcoords="offset points",
+                    ha="center",
+                    va="top" if height >= 0 else "bottom",
+                    weight="bold",
+                )
+
+        # Secondary axis for the line
         ax2 = ax1.twinx()
+        ax2.plot(x, line_series.to_numpy(), linewidth=2, marker="o")
+        ax2.set_ylabel(line_label)
 
-        # Plot line chart for 'bad_rate'
-        ax2.plot(np.arange(len(binSummaryTable['interval'])), binSummaryTable['bad_rate'], color=line_color, label='Bad Rate', linewidth = line_width)
-        ax2.scatter(np.arange(len(binSummaryTable['interval'])), binSummaryTable['bad_rate'], color=dot_color, s = dot_size)
-        ax2.set_xticks(ticks = np.arange(len(binSummaryTable['interval'])), labels = binSummaryTable['interval'])
-        ax2.set_ylabel('Bad Rate', color=dot_color)
-        
-        # Add text
-        med = binSummaryTable['bad_rate'].median()
-        if binSummaryTable.iloc[-1, 4] - binSummaryTable.iloc[0, 4] > 0 : # bar_rate
-            for i, val in enumerate(binSummaryTable['bad_rate']):
-                if val <= med :
-                    ax2.annotate(f'{val:.1%}', xy=(i, val), xytext=(0, -7.5), textcoords='offset points', ha='left', va='top', weight = annotation_font_weight, c = dot_color)
-                else :
-                    ax2.annotate(f'{val:.1%}', xy=(i, val), xytext=(0, 7.5), textcoords='offset points', ha='right', va='bottom', weight = annotation_font_weight, c = dot_color)
-        else :
-            for i, val in enumerate(binSummaryTable['bad_rate']):
-                if val <= med :
-                    ax2.annotate(f'{val:.1%}', xy=(i, val), xytext=(0, -7.5), textcoords='offset points', ha='right', va='top', weight = annotation_font_weight, c = dot_color)
-                else :
-                    ax2.annotate(f'{val:.1%}', xy=(i, val), xytext=(0, 7.5), textcoords='offset points', ha='left', va='bottom', weight = annotation_font_weight, c = dot_color)
-        # Set Legend        
-        plt.legend(labels = ['Bar Text : obs_dist', 'Dot Text : bad_rate'], loc = 'lower center')
-        # Set title
-        plt.title(f'Bins Summary Plot - {var_name} \n IV : {(binSummaryTable["iv_grp"].sum()):.4f}')
+        # Title
+        if title is None:
+            # If IV is available, put it in the title
+            iv_val = None
+            if "iv_grp" in data.columns:
+                try:
+                    iv_val = float(np.nansum(data["iv_grp"].to_numpy(dtype=float)))
+                except Exception:
+                    iv_val = None
+            title = "Bins Summary"
+            if iv_val is not None and np.isfinite(iv_val):
+                title += f"  ·  IV={iv_val:.4f}"
+        ax1.set_title(title)
 
-        if figsavePath != None :
-            fig.patch.set_facecolor('white')
-            plt.savefig(figsavePath, dpi = dpi)
-        # Show the plot
-        plt.show()
+        # Legend hint
+        ax1.legend([bar_label, line_label], loc="lower center")
 
-    @staticmethod
-    def plotPAVACsd(CSD_Summary, figsavePath: str = None , dpi:int = 300) :
-        
-        fig = plt.figure(figsize=(12,8))
-        ax = fig.add_subplot(111)
-        var = CSD_Summary.columns[0]
-        response = CSD_Summary.iloc[:,1].name.split('_')[0]
-        metric = CSD_Summary.iloc[:,1].name.split('_')[1]
-        
-        _GCM = CSD_Summary[['intervalStart', 'intervalEnd', 'assignMetric']].drop_duplicates(['intervalStart', 'intervalEnd', 'assignMetric'])
-        _GCM['[intervalStart'] = _GCM['intervalStart'].astype(str)
-        _GCM['intervalEnd)'] = _GCM['intervalStart'].shift(-1).astype(str)
-        _GCM.iloc[0,3] = str(-np.inf)
-        _GCM.iloc[-1,4] = str(np.inf)
-        _GCM['interval'] = '[' + _GCM['[intervalStart'] + ',' + _GCM['intervalEnd)'] + ')'
-        _GCM.loc[0, 'interval'] = _GCM.loc[0, 'interval'].replace('[', '(')
-        '''
-        GCM
-        intervalStart | intervalEnd | assignMetric | [intervalStart | intervalEnd) | interval
-        -------------------------------------------------------------------------------------
-        '''
-        
-        _CSD = CSD_Summary.drop_duplicates(var, keep = 'last')
-        # _GCM['interval'] = 
-        # Stats of PavmonoNode to plot CSD [self.var]
-        ax.plot(_CSD.iloc[:, 0], _CSD.iloc[:,1], 'bo-', label='CSD')
+        fig.tight_layout()
 
-        # PAVA result and assignment to to plot GCM ['assignValue']
-        # intervalStart | intervalEnd | assignMetric
-        ax.plot(_GCM.iloc[:, 1], _GCM.iloc[:,2], 'ro-', label='GCM')
-
-        # Scatter plot for CSD
-        ax.scatter(_CSD.iloc[:, 0], _CSD.iloc[:,1], color='blue')
-
-        # Scatter plot for GCM 
-        ax.scatter(_GCM.iloc[:, 1], _GCM.iloc[:,2], color='red')
-
-        #Add text
-        if _GCM.iloc[-1, 2] - _GCM.iloc[0, 2] > 0: # last metric - first metric -> get the sign : Greater than 0 --> '+'
-            for i, val in enumerate(_GCM['intervalEnd']):
-                ax.annotate(f'{_GCM.iloc[i, 5]}', xy=(val,_GCM.iloc[i, 2]), xytext=(2, -10), textcoords='offset points', ha='left', va='top', weight = 'bold', c = 'red', size = 9)
-        else :
-            for i, val in enumerate(_GCM['intervalEnd']):
-                ax.annotate(f'{_GCM.iloc[i, 5]}', xy=(val,_GCM.iloc[i, 2]), xytext=(2, -10), textcoords='offset points', ha='left', va='top', weight = 'bold', c = 'red', size = 9)
-
-        plt.xlabel(var)
-        plt.ylabel(metric)
-        plt.title(f'Pool Adjacent Violators : <{var}, {response}> on "{metric}"')
-
-        plt.legend(loc = 'best')
-        
-        if figsavePath != None :
-            fig.patch.set_facecolor('white')
-            plt.savefig(figsavePath, dpi = dpi)
-        
+        if figsave_path:
+            fig.patch.set_facecolor("white")
+            plt.savefig(figsave_path, dpi=dpi)
         plt.show()
