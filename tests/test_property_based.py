@@ -129,7 +129,10 @@ def _assert_monotone_means(bins: pd.DataFrame, sign: str):
 def _assert_bin_edges(df_bins: pd.DataFrame):
     left = df_bins["left"].to_numpy()
     right = df_bins["right"].to_numpy()
-    assert np.isfinite(left).all()
+    # first left is -inf, last right is +inf
+    assert math.isinf(left[0]) and left[0] < 0
+    assert np.isfinite(left[1:]).all()
+
     assert np.isfinite(right[:-1]).all()
     assert math.isinf(right[-1]) and right[-1] > 0
 

@@ -90,4 +90,6 @@ class MOBPlot:
         if savepath:
             fig.patch.set_facecolor("white")
             fig.savefig(savepath, dpi=dpi, bbox_inches="tight")
-        plt.close(fig)
+            plt.close(fig)
+        else:
+            plt.show()

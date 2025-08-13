@@ -12,7 +12,7 @@ def test_pava_monotone_strict_plateau():
     blocks = p.export_blocks(as_dict=True)
     # expect two blocks: [0,2) mean ~2, [2, +inf) mean ~3
     assert len(blocks) == 2
-    assert blocks[0]["left"] == 0.0 and np.isfinite(blocks[0]["right"])
+    assert np.isneginf(blocks[0]["left"])
     assert np.isposinf(blocks[1]["right"])
     # monotone increasing
     m0 = blocks[0]["sum"] / blocks[0]["n"]

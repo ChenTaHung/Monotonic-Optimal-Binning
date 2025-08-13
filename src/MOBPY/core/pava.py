@@ -198,7 +198,9 @@ class PAVA:
         for i in range(len(blocks) - 1):
             blocks[i].right = xs[i + 1]
         blocks[-1].right = float("inf")
-
+        # NEW: open the first bin to -inf so coverage is full range
+        blocks[0].left = float("-inf")
+        
         # Stack-based pooling (equiv to DLL merging from your original design)
         stack: List[_Block] = []
         for b in blocks:

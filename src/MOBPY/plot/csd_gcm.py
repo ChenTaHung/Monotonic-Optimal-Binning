@@ -76,14 +76,21 @@ def plot_csd_gcm(
     # Scatter group means
     ax.scatter(df["x"].to_numpy(), means.to_numpy(), label="Group means")
 
-    # Step function (mask +inf for plotting endcap)
+    # Step function (mask ±inf for plotting endcaps)
     sx = np.array(step_x, dtype=float)
     sy = np.array(step_y, dtype=float)
+
+    finite_x = df["x"].to_numpy()
+    xmin = float(finite_x.min())
+    xmax = float(finite_x.max())
+    span = max(1.0, abs(xmax - xmin))
+
+    # push the -inf and +inf steps slightly outward for visibility
+    if np.isneginf(sx).any():
+        sx = np.where(np.isneginf(sx), xmin - 0.05 * span, sx)
     if np.isposinf(sx).any():
-        finite_x = df["x"].to_numpy()
-        xmax = float(finite_x.max())
-        # push the +inf step slightly to the right for visibility
-        sx = np.where(np.isposinf(sx), xmax + 0.05 * max(1.0, abs(xmax)), sx)
+        sx = np.where(np.isposinf(sx), xmax + 0.05 * span, sx)
+
     ax.step(sx, sy, where="post", label="PAVA step")
 
     ax.set_xlabel(x_name)
@@ -95,7 +102,9 @@ def plot_csd_gcm(
     if savepath:
         fig.patch.set_facecolor("white")
         fig.savefig(savepath, dpi=dpi, bbox_inches="tight")
-    plt.close(fig)
+        plt.close(fig)
+    else:
+        plt.show()
 
 
 def plot_csd_gcm_from_binner(binner, **kwargs) -> None:

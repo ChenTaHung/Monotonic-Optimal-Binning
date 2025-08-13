@@ -34,8 +34,10 @@ def test_binner_binary_end_to_end():
     summary = binner.summary_()
 
     assert not bins.empty
-    assert np.isfinite(bins["left"]).all()
+    assert np.isfinite(bins["left"].iloc[1:]).all()
+    assert np.isneginf(bins["left"].iloc[0])
     # last right must be +inf for clean transform behavior
+    assert np.isfinite(bins["right"].iloc[:-1]).all()
     assert math.isinf(bins["right"].iloc[-1])
 
     # resolved sign monotonicity
@@ -74,7 +76,9 @@ def test_binner_numeric_end_to_end():
 
     bins = b.bins_()
     assert not bins.empty
-    assert np.isfinite(bins["left"]).all()
+    assert np.isfinite(bins["left"].iloc[1:]).all()
+    assert np.isneginf(bins["left"].iloc[0])
+    assert np.isfinite(bins["right"].iloc[:-1]).all()
     assert math.isinf(bins["right"].iloc[-1])
 
     sign = b.resolved_sign_
