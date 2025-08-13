@@ -163,11 +163,19 @@ class PAVA:
 
         # Resolve monotone direction
         if self.sign in {"+", "-"}:
-            resolved_sign: Literal["+", "-"] = self.sign  # type: ignore[assignment]
+            resolved_sign = self.sign
         else:
-            means_by_x = self.groups_["sum"] / self.groups_["count"]
-            corr = np.corrcoef(self.groups_["x"], means_by_x)[0, 1] if len(self.groups_) > 1 else 1.0
-            resolved_sign = "+" if (corr >= 0 or np.isnan(corr)) else "-"
+            # Infer direction from correlation of x vs. group means,
+            # but avoid corrcoef when one vector is constant (std == 0)
+            xs = self.groups_["x"].to_numpy(dtype=float)
+            means_by_x = (self.groups_["sum"] / self.groups_["count"]).to_numpy(dtype=float)
+
+            if len(xs) <= 1 or np.std(xs) == 0.0 or np.std(means_by_x) == 0.0:
+                corr = 1.0  # treat as non-decreasing (also avoids warnings)
+            else:
+                corr = float(np.corrcoef(xs, means_by_x)[0, 1])
+
+            resolved_sign = "+" if corr >= 0 else "-"
         self.resolved_sign_ = resolved_sign
 
         # One block per unique x (convert right edge to next x)

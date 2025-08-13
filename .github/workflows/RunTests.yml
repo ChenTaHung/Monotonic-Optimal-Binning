@@ -1,0 +1,51 @@
+name: RunTests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Upgrade pip & wheel
+        run: |
+          python -m pip install --upgrade pip wheel
+
+      - name: Install dependencies from requirements.txt
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            echo "No requirements.txt found (skipping)"
+          fi
+
+      - name: Install package (editable, no deps)
+        run: |
+          # Install your package without re-resolving deps we just installed
+          pip install -e . --no-deps
+
+      - name: Install test-only tools (if not already in requirements.txt)
+        run: |
+          pip install pytest hypothesis
+
+      - name: Run tests
+        run: |
+          pytest -vv -q

@@ -26,10 +26,11 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
-# Minimal runtime deps (plotting is optional, see [project.optional-dependencies])
+# Minimal runtime deps 
 dependencies = [
-  "numpy>=1.23",
-  "pandas>=1.5",
+  "numpy",
+  "pandas",
+  "matplotlib",
 ]
 
 [project.optional-dependencies]

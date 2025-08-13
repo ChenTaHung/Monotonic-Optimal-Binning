@@ -1,7 +1,4 @@
 # Minimal runtime dependencies for MOBPY 2.0.0
 numpy>=1.23
 pandas>=1.5
-
-# Plotting is optional and exposed as an extra via pyproject:
-#   pip install ".[plot]"
-# which pulls: matplotlib>=3.7
+matplotlib>=3.7

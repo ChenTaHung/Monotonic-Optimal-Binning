@@ -195,7 +195,11 @@ def merge_adjacent(blocks: Union[Iterable[Block], Iterable[Dict[str, Any]]],
         best = _best_adjacent_index(blks, constraints, is_binary_y)
         if best is None:
             break
-
+        
+        # In "min-bins" mode, never merge once we are at or below the target.
+        if not constraints.maximize_bins and len(blks) <= max(1, constraints.min_bins):
+            break
+        
         if constraints.maximize_bins and len(blks) > constraints.max_bins:
             blks = _merge_at(blks, best)
             continue
@@ -204,7 +208,7 @@ def merge_adjacent(blocks: Union[Iterable[Block], Iterable[Dict[str, Any]]],
         if score >= constraints.initial_pvalue or len(blks) > constraints.max_bins:
             blks = _merge_at(blks, best)
             continue
-
+        
         break
 
     blks = _sweep_min_samples(blks, constraints, is_binary_y)
