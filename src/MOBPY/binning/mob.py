@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, List, Literal, Optional
+from typing import Iterable, List, Literal, Optional, Dict, Any, cast
 
 import numpy as np
 import pandas as pd
@@ -117,46 +117,40 @@ class MonotonicBinner:
             strict=self.strict,
             sort_kind=self.sort_kind,
         ).fit()
+        
         self._pava = pava
         self.resolved_sign_ = pava.resolved_sign_
 
-        # 4) Resolve constraints to absolutes, based on *clean* totals
-        total_n = int(pava.groups_["count"].sum())
-        total_pos = int(pava.groups_["sum"].sum()) if self._is_binary_y else 0
+        # Resolve constraints against clean totals (positives for binary targets)
+        assert pava.groups_ is not None  # for mypy: groups_ is set post-fit
+        groups = pava.groups_
+        total_n = int(groups["count"].sum())
+        total_pos = int(groups["sum"].sum()) if self._is_binary_y else 0
         self.constraints.resolve(total_n=total_n, total_pos=total_pos)
 
-        # 5) Merge adjacent blocks (accept dicts from PAVA; coerce to Block)
-        blocks_dicts = pava.export_blocks(as_dict=True)  # safe primitive copies
+        # Export blocks from PAVA safely (dicts) → convert to merge.Block
+        blocks_dicts: List[Dict[str, Any]] = cast(List[Dict[str, Any]], pava.export_blocks(as_dict=True))
         blocks: List[Block] = as_blocks(blocks_dicts)
 
-        merged = merge_adjacent(
-            blocks,
-            constraints=self.constraints,
-            is_binary_y=bool(self._is_binary_y),
-        )
-        if not merged:
+        # Merge adjacent blocks using statistical tests + penalties
+        merged = merge_adjacent(blocks, constraints=self.constraints, is_binary_y=bool(self._is_binary_y))
+        if len(merged) == 0:
             raise RuntimeError("Merging produced zero bins; please report with data/constraints.")
         self._blocks = merged
 
-        # 6) Materialize clean numeric bins
+        # Materialize clean bins as DataFrame
         self._bins_df = self._blocks_to_df(merged)
 
-        # 7) Full summary (numeric + Missing/Excluded rows)
+        # Compose full summary (including missing/excluded); MOB columns if binary
         self._full_summary_df = self._build_full_summary()
         return self
 
     def bins_(self) -> pd.DataFrame:
-        """Return **clean** numeric bins only (no missing/excluded rows)."""
         if self._bins_df is None:
             raise RuntimeError("Call fit() first.")
         return self._bins_df.copy()
 
     def summary_(self) -> pd.DataFrame:
-        """Return full summary suitable for reporting/plots.
-
-        When `y` is binary, includes WoE/IV; also appends extra rows for
-        Missing and any Excluded value that actually appears in the data.
-        """
         if self._full_summary_df is None:
             raise RuntimeError("Call fit() first.")
         return self._full_summary_df.copy()

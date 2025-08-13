@@ -1,8 +1,15 @@
 from __future__ import annotations
 
-import matplotlib
-matplotlib.use("Agg")  # non-interactive backend (safe for tests/CI)
-import matplotlib.pyplot as plt
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import matplotlib  # pragma: no cover
+    import matplotlib.pyplot as plt  # pragma: no cover
+else:
+    import matplotlib  # type: ignore[import-not-found]
+    matplotlib.use("Agg")  # safe no-op if already set
+    import matplotlib.pyplot as plt  # type: ignore[import-not-found]
+    
 import numpy as np
 import pandas as pd
 

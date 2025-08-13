@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Sequence, Union
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Union, overload, cast
 import math
 import numpy as np
 
@@ -10,16 +10,6 @@ from .constraints import BinningConstraints
 
 @dataclass
 class Block:
-    """A contiguous bin (closed on the left, open on the right).
-
-    We store sufficient statistics to merge in O(1):
-    - n: count
-    - sum, sum2: for mean/variance
-    - ymin, ymax: min/max within the block
-
-    Note: `right` is the *raw* GCM/PAVA edge. The public bins table uses
-    “next-left” as the effective `right` and sets the last `right` to +inf.
-    """
     left: float
     right: float
     n: int
@@ -34,7 +24,6 @@ class Block:
 
     @property
     def var(self) -> float:
-        """Unbiased sample variance computed from (sum, sum2, n)."""
         if self.n <= 1:
             return 0.0
         num = self.sum2 - (self.sum * self.sum) / self.n
@@ -46,7 +35,6 @@ class Block:
         return math.sqrt(self.var)
 
     def merge_with(self, other: "Block") -> "Block":
-        """Return a new block equal to the union of self and other (adjacent)."""
         n = self.n + other.n
         s = self.sum + other.sum
         s2 = self.sum2 + other.sum2
@@ -54,7 +42,7 @@ class Block:
         ymax = max(self.ymax, other.ymax)
         return Block(
             left=self.left,
-            right=other.right,  # keep the outer-right boundary
+            right=other.right,
             n=n,
             sum=s,
             sum2=s2,
@@ -63,18 +51,11 @@ class Block:
         )
 
 
-# ------------------------- stats helpers (Welch-ish) ------------------------- #
-
 def _phi_cdf(z: float) -> float:
-    """Standard normal CDF via erfc for numeric stability."""
     return 0.5 * math.erfc(-z / math.sqrt(2.0))
 
 
 def _two_sample_pvalue(a: Block, b: Block) -> float:
-    """Two-sample test on means with pooled variance (Welch-lite).
-
-    We keep it simple/fast because this is used many times in greedy merging.
-    """
     na, nb = a.n, b.n
     if na == 0 or nb == 0:
         return 1.0
@@ -93,24 +74,16 @@ def _two_sample_pvalue(a: Block, b: Block) -> float:
 def _penalize_for_constraints(p: float, a: Block, b: Block,
                               constraints: BinningConstraints,
                               is_binary_y: bool) -> float:
-    """Heuristic penalty/bonus to bias the merge choice under constraints."""
     out = p
-
-    # Encourage fixing tiny bins (push p upward => looks “more mergeable”)
     if constraints.abs_min_samples:
         if a.n < constraints.abs_min_samples or b.n < constraints.abs_min_samples:
             out *= 1.5
-
-    # For binary targets, extreme purity tends to be noisy; nudge to merge
     if is_binary_y:
         if (a.mean in (0.0, 1.0)) or (b.mean in (0.0, 1.0)):
             out *= 1.25
-
-    # Discourage producing an oversized bin (reduce p so it’s harder to merge)
     if constraints.abs_max_samples:
         if a.n + b.n > constraints.abs_max_samples:
             out *= 0.5
-
     return out
 
 
@@ -124,13 +97,12 @@ def _pair_score(a: Block, b: Block,
 def _best_adjacent_index(blocks: Sequence[Block],
                          constraints: BinningConstraints,
                          is_binary_y: bool) -> Optional[int]:
-    """Pick the most “mergeable” adjacent pair by highest adjusted score."""
     if len(blocks) < 2:
         return None
-    best_idx = None
+    best_idx: Optional[int] = None
     best_score = -1.0
     for i in range(len(blocks) - 1):
-        sc = _pair_score(blocks[i], blocks[i + 1], constraints, is_binary_y)
+        sc = _pair_score(blocks[i], blocks[i+1], constraints, is_binary_y)
         if sc > best_score:
             best_score = sc
             best_idx = i
@@ -138,25 +110,18 @@ def _best_adjacent_index(blocks: Sequence[Block],
 
 
 def _merge_at(blocks: List[Block], idx: int) -> List[Block]:
-    merged = blocks[idx].merge_with(blocks[idx + 1])
-    return blocks[:idx] + [merged] + blocks[idx + 2:]
+    merged = blocks[idx].merge_with(blocks[idx+1])
+    return blocks[:idx] + [merged] + blocks[idx+2:]
 
-
-# -------------------------- hard min-samples sweep --------------------------- #
 
 def _sweep_min_samples(blocks: List[Block],
                        constraints: BinningConstraints,
                        is_binary_y: bool) -> List[Block]:
-    """Make every bin meet abs_min_samples if possible, but stop at min_bins.
-
-    Property-test rule we honor:
-      Either all bins meet min-samples OR len(bins) <= min_bins (we stop).
-    """
+    """Make every bin meet abs_min_samples if possible, but stop at min_bins."""
     if not constraints.abs_min_samples:
         return blocks
 
     while True:
-        # Stop if we’ve hit the floor; caller may allow undersized bins at that point.
         if len(blocks) <= max(1, constraints.min_bins):
             break
 
@@ -172,17 +137,14 @@ def _sweep_min_samples(blocks: List[Block],
             blocks = _merge_at(blocks, i - 1)
             continue
 
-        left_sc = _pair_score(blocks[i - 1], blocks[i], constraints, is_binary_y)
-        right_sc = _pair_score(blocks[i], blocks[i + 1], constraints, is_binary_y)
+        left_sc = _pair_score(blocks[i-1], blocks[i], constraints, is_binary_y)
+        right_sc = _pair_score(blocks[i], blocks[i+1], constraints, is_binary_y)
         blocks = _merge_at(blocks, i if right_sc >= left_sc else i - 1)
 
     return blocks
 
 
-# ------------------------- adapters + main merge loop ------------------------ #
-
-def blocks_from_dicts(rows: Iterable[dict]) -> List[Block]:
-    """Build Block list from a list of dictionaries (safe copy)."""
+def blocks_from_dicts(rows: Iterable[Dict[str, Any]]) -> List[Block]:
     out: List[Block] = []
     for r in rows:
         out.append(Block(
@@ -197,72 +159,56 @@ def blocks_from_dicts(rows: Iterable[dict]) -> List[Block]:
     return out
 
 
-def as_blocks(rows: Union[List[dict], List[Block]]) -> List[Block]:
-    """Accept either prebuilt Blocks or dicts; always return a fresh List[Block]."""
-    if rows and isinstance(rows[0], dict):
-        return blocks_from_dicts(rows)  # type: ignore[return-value]
-    # Copy to avoid side effects
-    return [Block(**vars(b)) for b in rows]  # shallow copy of dataclass fields
+@overload
+def as_blocks(rows: Iterable[Dict[str, Any]]) -> List[Block]: ...
+@overload
+def as_blocks(rows: Iterable[Block]) -> List[Block]: ...
+def as_blocks(rows: Iterable[Union[Dict[str, Any], Block]]) -> List[Block]:
+    """Coerce either dict-rows or Block-rows into List[Block]."""
+    lst = list(rows)
+    if not lst:
+        return []
+    if isinstance(lst[0], Block):
+        return cast(List[Block], lst)
+    return blocks_from_dicts(cast(Iterable[Dict[str, Any]], lst))
 
 
-def merge_adjacent(blocks: Union[List[Block], List[dict]],
+def _coerce_blocks(blocks: Union[Iterable[Block], Iterable[Dict[str, Any]]]) -> List[Block]:
+    """Internal: always return a concrete List[Block] for downstream funcs."""
+    return as_blocks(blocks)  # as_blocks already handles both cases
+
+
+def merge_adjacent(blocks: Union[Iterable[Block], Iterable[Dict[str, Any]]],
                    constraints: BinningConstraints,
                    is_binary_y: bool) -> List[Block]:
     """Greedy adjacent merges + hard min-samples sweep.
 
-    Behavior by mode:
-      - maximize_bins=True  → reduce until <= max_bins (p-value threshold helps choose which).
-      - maximize_bins=False → *preserve at least min_bins* (never merge past this floor),
-                              unless you’re already down to 1 bin.
-
-    The “anneal p” behavior (lower p if still violating limits) is implemented at
-    a higher level by the caller if needed; here we implement the core greedy pass.
+    Accepts either iterables of Block or dict rows; returns concrete List[Block].
     """
-    # Accept dict blocks too (some unit tests pass dicts)
-    if blocks and isinstance(blocks[0], dict):
-        blocks = blocks_from_dicts(blocks)  # type: ignore[assignment]
-
-    blocks = list(blocks)  # copy
-    if not blocks:
+    blks: List[Block] = _coerce_blocks(blocks)
+    if not blks:
         return []
 
     while True:
-        if len(blocks) <= 1:
+        if len(blks) <= 1:
             break
-        best = _best_adjacent_index(blocks, constraints, is_binary_y)
+        best = _best_adjacent_index(blks, constraints, is_binary_y)
         if best is None:
             break
 
-        # If we still exceed max_bins, keep merging the best pair outright
-        if constraints.maximize_bins and len(blocks) > constraints.max_bins:
-            blocks = _merge_at(blocks, best)
+        if constraints.maximize_bins and len(blks) > constraints.max_bins:
+            blks = _merge_at(blks, best)
             continue
 
-        # Evaluate statistical score for the chosen pair
-        score = _pair_score(blocks[best], blocks[best + 1], constraints, is_binary_y)
-
-        # ------------------------------------------------------------------
-        # NEW GUARD: In "minimize merges" mode (maximize_bins=False),
-        # do not merge if that would drop us *below* min_bins.
-        # (Property tests expect: len(bins) >= min_bins or len(bins) == 1.)
-        # ------------------------------------------------------------------
-        if not constraints.maximize_bins:
-            would_len = len(blocks) - 1
-            # Never go below the requested floor (unless we’re already at 1)
-            if would_len < max(1, constraints.min_bins):
-                break
-
-        # Merge by threshold OR if still over max_bins (rare when maximize_bins=False)
-        if score >= constraints.initial_pvalue or len(blocks) > (constraints.max_bins or float("inf")):
-            blocks = _merge_at(blocks, best)
+        score = _pair_score(blks[best], blks[best+1], constraints, is_binary_y)
+        if score >= constraints.initial_pvalue or len(blks) > constraints.max_bins:
+            blks = _merge_at(blks, best)
             continue
 
-        # No more merges by p-value
         break
 
-    # Enforce min-samples, but do not go below min_bins
-    blocks = _sweep_min_samples(blocks, constraints, is_binary_y)
-    return blocks
+    blks = _sweep_min_samples(blks, constraints, is_binary_y)
+    return blks
 
 
 __all__ = ["Block", "merge_adjacent", "blocks_from_dicts", "as_blocks"]

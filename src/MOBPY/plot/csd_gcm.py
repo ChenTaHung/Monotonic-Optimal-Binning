@@ -1,8 +1,15 @@
 from __future__ import annotations
 
-import matplotlib
-matplotlib.use("Agg")  # headless-safe
-import matplotlib.pyplot as plt
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import matplotlib  # pragma: no cover
+    import matplotlib.pyplot as plt  # pragma: no cover
+else:
+    import matplotlib  # type: ignore[import-not-found]
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt  # type: ignore[import-not-found]
+    
 import numpy as np
 import pandas as pd
 
@@ -92,10 +99,10 @@ def plot_csd_gcm(
 
 
 def plot_csd_gcm_from_binner(binner, **kwargs) -> None:
-    """Convenience wrapper to plot from a fitted MonotonicBinner."""
     if getattr(binner, "_pava", None) is None:
         raise RuntimeError("binner must be fitted; call fit() first.")
     pava: PAVA = binner._pava
+    assert pava.groups_ is not None  # mypy: ensure DataFrame
     plot_csd_gcm(
         groups_df=pava.groups_,
         blocks=pava.export_blocks(as_dict=True),

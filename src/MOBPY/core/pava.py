@@ -60,7 +60,6 @@ class _Block:
 
 VALID_SORT_KINDS = (None, "quicksort", "mergesort", "heapsort", "stable")
 
-
 class PAVA:
     """Pool-Adjacent Violators Algorithm for monotone means on grouped x.
 
@@ -136,11 +135,15 @@ class PAVA:
         # y must be numeric and finite
         ensure_numeric_series(sub[self.y], self.y)
 
-        # Sort first using requested algorithm; group in that order
+        # ---- sort first with desired algorithm, then groupby(sort=False) ----
         if self.sort_kind is None:
-            sub_sorted = sub.sort_values(by=self.x, na_position="last")
+            sub_sorted = self.df[[self.x, self.y]].dropna().sort_values(
+                by=self.x, na_position="last"
+            )
         else:
-            sub_sorted = sub.sort_values(by=self.x, kind=self.sort_kind, na_position="last")
+            sub_sorted = self.df[[self.x, self.y]].dropna().sort_values(
+                by=self.x, kind=self.sort_kind, na_position="last"
+            )
 
         gb = sub_sorted.groupby(self.x, sort=False)[self.y]
 
