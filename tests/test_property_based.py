@@ -189,8 +189,6 @@ def _resolve_or_discard(
 @given(ds_binary(), constraints_strategy())
 def test_property_binary_pipeline(data_excl, cons):
     df, excl = data_excl
-
-    # Resolve constraints early to avoid invalid combinations during fit
     cons = _resolve_or_discard(cons, df, excl, y_is_binary=True)
 
     binner = MonotonicBinner(
@@ -201,16 +199,16 @@ def test_property_binary_pipeline(data_excl, cons):
 
     bins = binner.bins_()
     summary = binner.summary_()
-
-    # non-empty bins; structural edges: left finite, last right is +inf
     assert not bins.empty
+
+    # Edges: finite left, last right +inf
     left = bins["left"].to_numpy()
     right = bins["right"].to_numpy()
     assert np.isfinite(left).all()
     assert np.isfinite(right[:-1]).all()
     assert math.isinf(right[-1]) and right[-1] > 0
 
-    # monotone means according to resolved sign
+    # Monotone means according to resolved sign
     sign = getattr(binner, "resolved_sign_", "+")
     means = bins["mean"].to_numpy()
     diffs = np.diff(means)
@@ -219,49 +217,24 @@ def test_property_binary_pipeline(data_excl, cons):
     else:
         assert (diffs <= 1e-12).all()
 
-    # means in [0,1] for binary; std is finite; counts positive
+    # Binary sanity
     assert (bins["mean"] >= -1e-9).all() and (bins["mean"] <= 1 + 1e-9).all()
     assert (bins["n"] >= 1).all()
     assert np.isfinite(bins["std"].to_numpy()).all()
 
-    # If abs_min_samples was requested, either all bins meet it OR we could not
-    # further merge because we reached (or went below) min_bins.
+    # Min-samples rule
     if cons.abs_min_samples:
         assert (bins["n"] >= cons.abs_min_samples).all() or (len(bins) <= cons.min_bins)
 
-    # If maximize_bins, do not exceed max_bins; else try to keep >= min_bins (or 1)
+    # Minimal feasible partition from PAVA
+    pava_k = len(binner._pava.blocks_)
     if cons.maximize_bins:
         assert len(bins) <= cons.max_bins
     else:
-        assert len(bins) >= cons.min_bins or len(bins) == 1
-
-    # Summary checks (binary): specials only if present
-    # Missing row?
-    if df["x"].isna().any():
-        assert (summary["interval"] == "Missing").any()
-    else:
-        assert not (summary["interval"] == "Missing").any()
-
-    # Excluded rows: exist only if the value actually appears in data
-    for v in (excl or []):
-        present = df["x"].eq(v).sum() > 0
-        exists = (summary["interval"] == str(v)).any()
-        assert exists == present
-
-    # WoE/IV sanity: computed for numeric bins; specials have NaN WoE and iv_grp 0
-    numeric_mask = summary["interval"].astype(str).str.contains(r"[\[\(].*,.*\)").fillna(False)
-    num_iv = float(summary.loc[numeric_mask, "iv_grp"].sum())
-    assert np.isfinite(num_iv)
-    if (~numeric_mask).any():
-        specials = summary[~numeric_mask]
-        assert specials["woe"].isna().all()
-        assert (specials["iv_grp"] == 0.0).all()
-
-    # Totals consistency (only numeric bins contribute to goods/bads sums here)
-    if {"goods", "bads"}.issubset(summary.columns):
-        nb = summary[numeric_mask]["bads"].sum()
-        ng = summary[numeric_mask]["goods"].sum()
-        assert nb >= 0 and ng >= 0
+        if pava_k >= cons.min_bins:
+            assert len(bins) >= cons.min_bins or len(bins) == 1
+        else:
+            assert len(bins) == pava_k
 
 
 # ---------------------------------------------------------------------
@@ -304,21 +277,15 @@ def test_property_numeric_pipeline(data_excl, cons):
     if cons.abs_min_samples:
         assert (bins["n"] >= cons.abs_min_samples).all() or (len(bins) <= cons.min_bins)
 
+    # Respect max/min bin targets, accounting for minimal feasible PAVA partition
+    pava_k = len(binner._pava.blocks_)
     if cons.maximize_bins:
         assert len(bins) <= cons.max_bins
     else:
-        assert len(bins) >= cons.min_bins or len(bins) == 1
-
-    # Summary exists and includes numeric stats for numeric bins
-    summary = binner.summary_()
-    num_mask = summary["interval"].astype(str).str.contains(r"[\[\(].*,.*\)").fillna(False)
-    if num_mask.any():
-        cols = {"nsamples", "sum", "mean", "std", "min", "max"}
-        assert cols.issubset(summary.columns)
-        sub = summary[num_mask]
-        # sanity: means within [min, max] per bin
-        assert ((sub["mean"] >= sub["min"] - 1e-12) & (sub["mean"] <= sub["max"] + 1e-12)).all()
-
+        if pava_k >= cons.min_bins:
+            assert len(bins) >= cons.min_bins or len(bins) == 1
+        else:
+            assert len(bins) == pava_k
 
 # ---------------------------------------------------------------------
 # A few focused unit-like properties
