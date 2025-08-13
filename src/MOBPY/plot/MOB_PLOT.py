@@ -1,209 +1,86 @@
-# src/MOBPY/plot/mob_plot.py
-"""
-Plot helpers for monotone bins (MOB/PAVA outputs).
-
-This module provides a small, dependency-light plotting utility that accepts the
-DataFrame returned by `MonotonicBinner.summary_()` (recommended) or, with minor
-limitations, `MonotonicBinner.bins_()`.
-
-Primary chart
--------------
-- `plot_bins_summary(df, ...)`:
-    - Bars: WoE (if binary) or observations share (fallback)
-    - Line: bad rate (binary) or mean (numeric)
-    - X-axis: interval labels in left-closed, right-open form "[a, b)"
-
-Robustness & compatibility
---------------------------
-- Accepts either full summary (includes WoE/IV) or just clean bins.
-- If WoE is missing (numeric targets), bars fallback to `dist_obs`.
-- Validates required columns and raises helpful ValueError messages.
-
-Example
--------
->>> from MOBPY.plot.mob_plot import MOBPlot
->>> df = binner.summary_()  # from MonotonicBinner.fit().summary_()
->>> MOBPlot.plot_bins_summary(df, title="Duration in Month")
-"""
-
 from __future__ import annotations
 
-from typing import Optional
-
+import matplotlib
+matplotlib.use("Agg")  # non-interactive backend (safe for tests/CI)
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 
 class MOBPlot:
-    """Static plotting helpers for MOB/PAVA outputs."""
-
-    @staticmethod
-    def _ensure_interval_columns(df: pd.DataFrame) -> pd.DataFrame:
-        """Ensure the frame has a string interval label column.
-
-        Strategy:
-            - If '[intervalStart' and 'intervalEnd)' exist, build 'interval' from them.
-            - Else if 'left'/'right' exist, build from numeric edges.
-            - Else, require an existing 'interval' string column.
-
-        Returns:
-            A shallow copy of `df` with an 'interval' column.
-
-        Raises:
-            ValueError: if interval information is not present.
-        """
-        out = df.copy()
-        if "[intervalStart" in out.columns and "intervalEnd)" in out.columns:
-            # Already string-like in summary_
-            lefts = out["[intervalStart"].astype(str).to_numpy()
-            rights = out["intervalEnd)"].astype(str).to_numpy()
-            labels = np.array([f"[{l}, {r})" for l, r in zip(lefts, rights)], dtype=object)
-            # legacy: first interval uses "(" if it's -inf; keep consistent with input
-            labels[0] = labels[0].replace("[", "(") if "-inf" in labels[0] else labels[0]
-            out["interval"] = labels
-            return out
-
-        if "left" in out.columns and "right" in out.columns:
-            lefts = out["left"].to_numpy()
-            rights = out["right"].to_numpy()
-            labels = np.array([f"[{l}, {r})" for l, r in zip(lefts, rights)], dtype=object)
-            # if first left is -inf, render with "("
-            if len(labels) and np.isneginf(lefts[0]):
-                labels[0] = labels[0].replace("[", "(")
-            out["interval"] = labels
-            return out
-
-        if "interval" in out.columns:
-            return out
-
-        raise ValueError(
-            "Cannot construct interval labels. Expected columns "
-            "`['[intervalStart','intervalEnd)']` or `['left','right']` or an "
-            "existing 'interval' column."
-        )
-
-    @staticmethod
-    def _is_binary_summary(df: pd.DataFrame) -> bool:
-        """Heuristic: summary contains MOB columns if WoE is present."""
-        return "woe" in df.columns or "bads" in df.columns or "rate" in df.columns
+    """Static plotting utilities for MOB-style summaries."""
 
     @staticmethod
     def plot_bins_summary(
-        df: pd.DataFrame,
+        summary: pd.DataFrame,
         *,
-        title: Optional[str] = None,
-        figsave_path: Optional[str] = None,
-        dpi: int = 300,
-        bar_alpha: float = 0.5,
-        bar_width: float = 0.5,
+        figsize=(12, 7),
+        dpi: int = 120,
+        bar_alpha: float = 0.55,
+        bar_width: float = 0.6,
+        annotate: bool = True,
+        title: str | None = None,
+        savepath: str | None = None,
     ) -> None:
-        """Plot a compact summary of bins.
-
-        Bars show WoE (if available) or distribution of observations as a fallback.
-        Line shows bad rate (binary) or mean (numeric).
+        """Plot WoE bars + bad-rate line from a MOB-style summary.
 
         Args:
-            df: DataFrame from `MonotonicBinner.summary_()` (preferred) or `bins_()`.
-            title: Optional chart title; if None, a sensible default is used.
-            figsave_path: Optional path to save the figure.
-            dpi: Save DPI if `figsave_path` is provided.
-            bar_alpha: Alpha (opacity) for bars.
+            summary: DataFrame returned by `MonotonicBinner.summary_()` when `y` is binary.
+                     Must contain:
+                       ['interval','nsamples','bads','goods','bad_rate','woe','iv_grp']
+            figsize: Figure size in inches.
+            dpi: Matplotlib DPI.
+            bar_alpha: Alpha for WoE bars.
             bar_width: Width of bars.
+            annotate: If True, annotate WoE bars with sample proportions and dots with bad-rate.
+            title: Optional title string; defaults to total IV.
+            savepath: Optional path to save the figure.
 
         Raises:
-            ValueError: If the input does not contain the necessary columns.
+            ValueError: If required columns missing or no numeric bins to plot.
         """
-        if not isinstance(df, pd.DataFrame):
-            raise ValueError("`df` must be a pandas DataFrame.")
+        req = {"interval", "nsamples", "bads", "goods", "bad_rate", "woe", "iv_grp"}
+        missing = req - set(summary.columns)
+        if missing:
+            raise ValueError(f"summary missing required columns: {sorted(missing)}")
 
-        # Work on a copy and ensure interval labels exist
-        data = MOBPlot._ensure_interval_columns(df)
+        df = summary.copy().reset_index(drop=True)
 
-        # Deduce whether we have binary-style output (WoE, bad rate)
-        is_binary = MOBPlot._is_binary_summary(data)
+        # Numeric bins: those with finite left/right (Missing/Excluded have NaN edges)
+        numeric = df[df["interval"].notna() & df["left"].notna() & df["right"].notna()].copy()
+        if numeric.empty:
+            raise ValueError("No numeric bins found to plot.")
 
-        # Choose series to plot
-        # Bars prefer WoE when available; otherwise fallback to distribution of obs.
-        if is_binary and "woe" in data.columns:
-            bar_series = data["woe"].astype(float)
-            bar_label = "WoE"
-        else:
-            # fallback: dist of observations if present; else compute from 'n'
-            if "dist_obs" in data.columns:
-                bar_series = data["dist_obs"].astype(float)
-            elif "n" in data.columns:
-                n = data["n"].astype(float)
-                bar_series = n / n.sum() if n.sum() > 0 else n * np.nan
-            else:
-                raise ValueError("Cannot determine bar series: need 'woe' or 'dist_obs' or 'n'.")
-            bar_label = "Obs. share"
+        x = np.arange(len(numeric))
+        intervals = numeric["interval"].astype(str).tolist()
+        woe = numeric["woe"].to_numpy(dtype=float)
+        bad_rate = numeric["bad_rate"].to_numpy(dtype=float)
 
-        # Line series: bad rate (binary) or mean (numeric)
-        if is_binary and "rate" in data.columns:
-            line_series = data["rate"].astype(float)
-            line_label = "Bad rate"
-        elif "mean" in data.columns:
-            line_series = data["mean"].astype(float)
-            line_label = "Mean"
-        else:
-            raise ValueError("Cannot determine line series: need 'rate' (binary) or 'mean'.")
+        fig, ax1 = plt.subplots(figsize=figsize, dpi=dpi)
+        bars = ax1.bar(x, woe, width=bar_width, alpha=bar_alpha)
+        ax1.axhline(0.0, linewidth=1)
+        ax1.set_xticks(x, intervals, rotation=0)
+        ax1.set_ylabel("WoE")
 
-        # X labels
-        labels = data["interval"].astype(str).to_list()
-        x = np.arange(len(labels))
+        # annotate WoE bars with obs distribution
+        if annotate and "nsamples" in numeric.columns:
+            dist = numeric["nsamples"].to_numpy(dtype=float)
+            dist = dist / (dist.sum() if dist.sum() > 0 else 1.0)
+            for xi, bar, d in zip(x, bars, dist):
+                h = bar.get_height()
+                va = "bottom" if h >= 0 else "top"
+                yoff = 0.01 if h >= 0 else -0.01
+                ax1.text(xi, h + yoff, f"{d:.1%}", ha="center", va=va, fontsize=9)
 
-        # Create plot
-        fig, ax1 = plt.subplots(1, 1, figsize=(12, 8))
-        bars = ax1.bar(x, bar_series.to_numpy(), width=bar_width, alpha=bar_alpha)
-        ax1.set_xticks(x, labels, rotation=0)
-        ax1.axhline(0, linewidth=1)
-        ax1.set_ylabel(bar_label)
-
-        # Annotate bar with obs share if available
-        if "dist_obs" in data.columns:
-            dist = data["dist_obs"].astype(float).to_numpy()
-            for i, bar in enumerate(bars):
-                height = bar.get_height()
-                if np.isnan(height):
-                    continue
-                # Position text above/below depending on sign
-                y_off = 10 if height >= 0 else -8
-                ax1.annotate(
-                    f"{dist[i]:.1%}",
-                    xy=(bar.get_x() + bar.get_width() / 2, height),
-                    xytext=(0, y_off),
-                    textcoords="offset points",
-                    ha="center",
-                    va="top" if height >= 0 else "bottom",
-                    weight="bold",
-                )
-
-        # Secondary axis for the line
         ax2 = ax1.twinx()
-        ax2.plot(x, line_series.to_numpy(), linewidth=2, marker="o")
-        ax2.set_ylabel(line_label)
+        ax2.plot(x, bad_rate, marker="o")
+        ax2.set_ylabel("Bad Rate")
 
-        # Title
-        if title is None:
-            # If IV is available, put it in the title
-            iv_val = None
-            if "iv_grp" in data.columns:
-                try:
-                    iv_val = float(np.nansum(data["iv_grp"].to_numpy(dtype=float)))
-                except Exception:
-                    iv_val = None
-            title = "Bins Summary"
-            if iv_val is not None and np.isfinite(iv_val):
-                title += f"  ·  IV={iv_val:.4f}"
-        ax1.set_title(title)
-
-        # Legend hint
-        ax1.legend([bar_label, line_label], loc="lower center")
+        iv_total = float(numeric["iv_grp"].sum())
+        ax1.set_title(title or f"Bins Summary (IV = {iv_total:.4f})")
 
         fig.tight_layout()
-
-        if figsave_path:
+        if savepath:
             fig.patch.set_facecolor("white")
-            plt.savefig(figsave_path, dpi=dpi)
-        plt.show()
+            fig.savefig(savepath, dpi=dpi, bbox_inches="tight")
+        plt.close(fig)

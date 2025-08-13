@@ -1,97 +1,49 @@
-# src/MOBPY/binning/mob.py
-"""
-High-level orchestrator that unifies PAVA + constraints-aware merging
-and (optionally) MOB-style summaries for binary targets.
-
-This module treats **MOB** (monotonic optimal binning for classification)
-as a **special case** of the general PAVA workflow:
-
-    1) PAVA enforces monotonicity on a chosen metric across ordered `x`.
-    2) Adjacent-merge stage uses statistical tests + penalties to satisfy
-       bin-count and bin-size constraints.
-    3) (Optional for binary targets) compute WoE/IV and rate summaries.
-
-Key responsibilities:
-    - Handle missing and "exclude" values outside of the monotone engine.
-    - Configure and resolve binning constraints.
-    - Run PAVA, merge, and materialize bins with stable `[left, right)` edges.
-    - For binary targets: produce MOB-friendly columns (goods/bads, WoE, IV).
-
-Example:
-    >>> from MOBPY.binning.mob import MonotonicBinner
-    >>> from MOBPY.core.constraints import BinningConstraints
-    >>> import pandas as pd
-    >>>
-    >>> df = pd.read_csv("/data/german_data_credit_cat.csv")
-    >>> df["default"] = df["default"] - 1  # make binary {0,1}
-    >>>
-    >>> cons = BinningConstraints(max_bins=6, min_bins=4,
-    ...                           max_samples=0.4, min_samples=0.05, min_positives=0.05,
-    ...                           initial_pvalue=0.4, maximize_bins=True)
-    >>>
-    >>> mob = MonotonicBinner(df, x="Durationinmonth", y="default",
-    ...                       metric="mean", sign="auto", constraints=cons)
-    >>> mob.fit()
-    MonotonicBinner(...)
-    >>> bins = mob.bins_()     # core bins
-    >>> out  = mob.summary_()  # MOB-style summary (with WoE/IV for binary y)
-"""
-
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import List, Literal, Optional, Sequence, Union
+from typing import Iterable, List, Literal, Optional
 
 import numpy as np
 import pandas as pd
 
 from MOBPY.core.constraints import BinningConstraints
-from MOBPY.core.pava import PAVA
 from MOBPY.core.merge import Block, merge_adjacent, as_blocks
-
-
-AssignMode = Literal["interval", "left", "right"]
-
-
-@dataclass
-class _Partitions:
-    """Holds dataset partitions by `x` cleanliness/exclusion.
-
-    Attributes:
-        clean: Rows used by PAVA/merge (non-missing and not excluded).
-        missing: Rows where `x` is NA (or None). None if absent.
-        excluded: Rows where `x` ∈ exclude_values. None if absent.
-    """
-    clean: pd.DataFrame
-    missing: Optional[pd.DataFrame]
-    excluded: Optional[pd.DataFrame]
+from MOBPY.core.pava import PAVA
+from MOBPY.core.utils import Parts, partition_df, woe_iv, is_binary_series
 
 
 class MonotonicBinner:
-    """Run PAVA → merge, then expose bins and (optionally) MOB-style summary.
+    """End-to-end monotone optimal binning (MOB special case of PAVA).
 
-    MOB (binary target) is achieved by setting `metric="mean"` and providing a
-    binary `y` (values in {0,1}). For numeric `y`, a numeric summary is produced.
+    This class is the “public” pipeline:
+
+    1) Partition the data into **clean** / **missing** / **excluded** by `x`.
+    2) Detect whether `y` is binary on the *clean* part (MOB special case).
+    3) Run **PAVA** with `metric="mean"` to get monotone blocks.
+    4) Greedily **merge adjacent** blocks with a p-value threshold and
+       constraint penalties (min/max samples, min positives, etc.).
+    5) Materialize numeric bins and (optionally) produce a MOB-style summary.
+
+    Notes:
+      * We treat the last numeric bin as right-open **(+∞)** for clean mapping.
+      * Missing and special/excluded values are materialized as extra rows in the
+        summary (not in the numeric bins).
+      * For binary `y`, `sum` is the count of ones; WoE/IV are computed with
+        simple additive smoothing to avoid log(0).
 
     Args:
         df: Input DataFrame.
-        x: Column name used for ordering/bucketing (must be sortable).
-        y: Response column name. Must be numeric. If binary {0,1}, MOB summary
-            (goods/bads, WoE/IV) is available; otherwise only numeric stats.
-        metric: PAVA metric to enforce monotonicity on:
-            {"count","mean","sum","std","var","min","max","ptp"}.
-            For MOB (binary y), use "mean".
-        sign: "+", "-", or "auto" for monotone direction (see `PAVA` docs).
-        strict: If True, merges plateaus during PAVA; else allows equality.
-        constraints: `BinningConstraints`. If None, sensible defaults used.
-        exclude_values: Values in `x` to set aside into their own terminal bins
-            (strings will be preserved as strings in the final summary).
-        sort_kind: Sorting algorithm for ordering by x (default "mergesort").
+        x: Column to bin (feature).
+        y: Column whose **mean** drives monotonicity / merge tests.
+        metric: Only `"mean"` is supported (MOB case).
+        sign: `+`, `-`, or `"auto"` (direction of monotonicity).
+        strict: If True, equal-means plateaus are merged inside PAVA.
+        constraints: BinningConstraints object (fractions resolved in `fit()`).
+        exclude_values: Values in `x` to pull into separate bins in the summary.
+        sort_kind: Sorting algorithm used in PAVA’s group-by preparation.
 
     Raises:
-        KeyError: If `x`/`y` missing in `df`.
-        TypeError: If `y` is not numeric.
-        ValueError: For invalid inputs or empty partitions.
+        ValueError: If no clean rows remain to bin.
+        RuntimeError: If merging produces zero bins (shouldn’t happen).
     """
 
     def __init__(
@@ -99,29 +51,33 @@ class MonotonicBinner:
         df: pd.DataFrame,
         x: str,
         y: str,
-        metric: str = "mean",
+        metric: Literal["mean"] = "mean",
         sign: Literal["+", "-", "auto"] = "auto",
         strict: bool = True,
         constraints: Optional[BinningConstraints] = None,
-        exclude_values: Optional[Union[Sequence[Union[int, float, str]], int, float, str]] = None,
-        sort_kind: str = "mergesort",
-    ) -> None:
+        exclude_values: Optional[Iterable] = None,
+        sort_kind: Optional[str] = None,
+    ):
+        if metric != "mean":
+            raise ValueError("Only metric='mean' is supported in the MOB special case.")
         self.df = df
         self.x = x
         self.y = y
         self.metric = metric
         self.sign = sign
         self.strict = strict
+        self.exclude_values = list(exclude_values) if exclude_values is not None else None
         self.sort_kind = sort_kind
-
         self.constraints = constraints or BinningConstraints()
-        self.exclude_values = self._normalize_exclude(exclude_values)
 
         # Fitted artifacts
+        self._parts: Optional[Parts] = None
+        self._pava: Optional[PAVA] = None
+        self.resolved_sign_: Optional[str] = None
         self._is_binary_y: Optional[bool] = None
-        self._parts: Optional[_Partitions] = None
-        self._bins_df: Optional[pd.DataFrame] = None          # clean bins only
-        self._full_summary_df: Optional[pd.DataFrame] = None  # bins + missing + excluded (MOB-style if binary)
+        self._blocks: Optional[List[Block]] = None
+        self._bins_df: Optional[pd.DataFrame] = None
+        self._full_summary_df: Optional[pd.DataFrame] = None
 
     # --------------------------------------------------------------------- #
     # Public API
@@ -134,27 +90,24 @@ class MonotonicBinner:
             - Partition df into clean/missing/excluded by x.
             - Detect binary vs. numeric y on the *clean* partition.
             - Resolve fractional constraints to absolute using clean totals.
-            - Run PAVA(metric) on clean → monotone blocks.
+            - Run PAVA(metric='mean') on clean → monotone blocks.
             - Merge adjacent blocks until constraints satisfied.
             - Materialize bins DataFrame (clean only).
             - Build (optional) MOB-style summary: add missing/excluded rows.
 
         Returns:
             Self (for chaining).
-
-        Raises:
-            ValueError: If no rows remain for binning after partitioning.
         """
-        parts = self._partition_df()
+        # 1) Clean/missing/excluded split
+        parts = partition_df(self.df, self.x, self.exclude_values)
         self._parts = parts
         if parts.clean.empty:
-            raise ValueError("No rows available for binning after excluding missing/excluded x values.")
+            raise ValueError("No rows available after excluding missing/special x values.")
 
-        # Infer binary-ness of y from the CLEAN partition
-        yvals = parts.clean[self.y].dropna().unique()
-        self._is_binary_y = np.isin(yvals, [0, 1]).all() and len(yvals) <= 2
+        # 2) Detect binary y on clean
+        self._is_binary_y = is_binary_series(parts.clean[self.y])
 
-        # PAVA on the clean subset
+        # 3) PAVA on the clean subset (monotone means)
         pava = PAVA(
             df=parts.clean[[self.x, self.y]],
             x=self.x,
@@ -164,331 +117,266 @@ class MonotonicBinner:
             strict=self.strict,
             sort_kind=self.sort_kind,
         ).fit()
+        self._pava = pava
+        self.resolved_sign_ = pava.resolved_sign_
 
-        # Resolve constraints against clean totals (positives for binary targets)
+        # 4) Resolve constraints to absolutes, based on *clean* totals
         total_n = int(pava.groups_["count"].sum())
         total_pos = int(pava.groups_["sum"].sum()) if self._is_binary_y else 0
         self.constraints.resolve(total_n=total_n, total_pos=total_pos)
 
-        # Export blocks from PAVA safely (dicts) → convert to merge.Block
-        blocks_dicts = pava.export_blocks(as_dict=True)   # safe copies, primitives only
+        # 5) Merge adjacent blocks (accept dicts from PAVA; coerce to Block)
+        blocks_dicts = pava.export_blocks(as_dict=True)  # safe primitive copies
         blocks: List[Block] = as_blocks(blocks_dicts)
 
-        # Merge adjacent blocks using statistical tests + penalties
-        merged = merge_adjacent(blocks, constraints=self.constraints, is_binary_y=bool(self._is_binary_y))
+        merged = merge_adjacent(
+            blocks,
+            constraints=self.constraints,
+            is_binary_y=bool(self._is_binary_y),
+        )
+        if not merged:
+            raise RuntimeError("Merging produced zero bins; please report with data/constraints.")
+        self._blocks = merged
 
-        # Materialize clean bins as DataFrame
+        # 6) Materialize clean numeric bins
         self._bins_df = self._blocks_to_df(merged)
 
-        # Compose full summary (including missing/excluded); MOB columns if binary
+        # 7) Full summary (numeric + Missing/Excluded rows)
         self._full_summary_df = self._build_full_summary()
         return self
 
     def bins_(self) -> pd.DataFrame:
-        """Return the **clean** bins (no missing/excluded rows).
-
-        Columns:
-            left, right, n, sum, mean, std, min, max
-            (+ for binary y) positives, negatives, rate
-
-        Returns:
-            pd.DataFrame
-
-        Raises:
-            RuntimeError: If `fit()` has not been called.
-        """
+        """Return **clean** numeric bins only (no missing/excluded rows)."""
         if self._bins_df is None:
-            raise RuntimeError("Call fit() before requesting bins.")
+            raise RuntimeError("Call fit() first.")
         return self._bins_df.copy()
 
     def summary_(self) -> pd.DataFrame:
-        """Return the final output table.
+        """Return full summary suitable for reporting/plots.
 
-        - For binary `y`: MOB-style table with WoE/IV and interval strings
-          (plus extra rows for missing/excluded when present).
-        - For numeric `y`: appended missing/excluded rows with basic stats.
-
-        Returns:
-            pd.DataFrame
-
-        Raises:
-            RuntimeError: If `fit()` has not been called.
+        When `y` is binary, includes WoE/IV; also appends extra rows for
+        Missing and any Excluded value that actually appears in the data.
         """
         if self._full_summary_df is None:
-            raise RuntimeError("Call fit() before requesting summary.")
+            raise RuntimeError("Call fit() first.")
         return self._full_summary_df.copy()
 
-    def transform(self, x_series: pd.Series, assign: AssignMode = "interval") -> pd.Series:
-        """Assign each value in `x_series` to a bin label/edge.
-
-        Missing and excluded values:
-            - Missing (NaN) are labeled "Missing" in interval mode.
-            - Excluded values are labeled as their exact value (string) bins.
+    def transform(
+        self,
+        x_values: pd.Series,
+        assign: Literal["interval", "left", "right"] = "interval",
+    ) -> pd.Series:
+        """Map raw x-values to the fitted interval labels or edges.
 
         Args:
-            x_series: Series of x values to map.
-            assign: "interval" | "left" | "right".
+            x_values: Series of values to transform.
+            assign: One of:
+                - "interval": string label like "[a, b)" or "(-inf, b)"
+                - "left": left edge value
+                - "right": right edge value
 
         Returns:
-            Series aligned to `x_series`.
+            Series of assignments. Missing values map to "Missing".
+            Excluded values map to their string repr if `assign="interval"`,
+            else NaN (we don't provide numeric edges for special bins).
         """
-        if self._bins_df is None or self._parts is None:
-            raise RuntimeError("Call fit() before transform().")
+        if self._bins_df is None:
+            raise RuntimeError("Call fit() first.")
 
-        # Start with clean mapping from numeric bins
-        clean_bins = self._bins_df
-        rights = clean_bins["right"].to_numpy()
-        lefts = clean_bins["left"].to_numpy()
-        labels = np.array([f"[{l}, {r})" for l, r in zip(lefts, rights)], dtype=object)
+        bins = self._bins_df
+        lefts = bins["left"].to_numpy()
+        rights = bins["right"].to_numpy()
 
-        vals = x_series.to_numpy()
-        out = np.empty_like(vals, dtype=object if assign == "interval" else float)
-
-        # Missing → special label or NaN for edges
-        is_na = pd.isna(vals)
-        if assign == "interval":
-            out[is_na] = "Missing"
-        else:
-            out[is_na] = np.nan
-
-        # Excluded values → show the exact value when assign=="interval"
-        is_excl = np.zeros_like(is_na, dtype=bool)
-        if self.exclude_values:
-            excl_set = set(self.exclude_values)
-            is_excl = pd.Series(vals).isin(excl_set).to_numpy()
-            if assign == "interval":
-                out[is_excl] = pd.Series(vals).astype(str).to_numpy()[is_excl]
-            else:
-                out[is_excl] = np.nan
-
-        # Clean values → use searchsorted
-        mask = ~(is_na | is_excl)
-        if mask.any():
-            idx = np.searchsorted(rights, vals[mask], side="right")
-            idx = np.clip(idx, 0, len(rights) - 1)
+        def _assign_one(v):
+            if pd.isna(v):
+                return "Missing"
+            if self.exclude_values and v in self.exclude_values:
+                return str(v) if assign == "interval" else np.nan
+            # Half-open membership: left <= v < right
+            i = np.searchsorted(rights, v, side="right")
+            i = min(i, len(rights) - 1)
+            if v < lefts[i]:
+                i = max(0, i - 1)
+            l, r = lefts[i], rights[i]
             if assign == "left":
-                out[mask] = lefts[idx]
-            elif assign == "right":
-                out[mask] = rights[idx]
-            else:
-                out[mask] = labels[idx]
+                return l
+            if assign == "right":
+                return r
+            label = f"[{_format_edge(l)}, {_format_edge(r)})"
+            if np.isneginf(l):
+                label = "(" + label[1:]  # (-inf, …)
+            return label
 
-        return pd.Series(out, index=x_series.index, name=assign)
+        return x_values.apply(_assign_one)
 
     # --------------------------------------------------------------------- #
-    # Internals: partitions, blocks → df, summaries
+    # Internals
     # --------------------------------------------------------------------- #
-
-    @staticmethod
-    def _normalize_exclude(exclude: Optional[Union[Sequence, int, float, str]]) -> List[Union[int, float, str]]:
-        """Return a flat list of exclude values (empty list if None)."""
-        if exclude is None:
-            return []
-        if isinstance(exclude, (list, tuple, set, np.ndarray, pd.Series)):
-            return list(exclude)
-        return [exclude]
-
-    def _partition_df(self) -> _Partitions:
-        """Split df into clean/missing/excluded based on `x`.
-
-        Returns:
-            _Partitions with clean, missing (or None), excluded (or None).
-
-        Raises:
-            KeyError: If `x` or `y` columns are absent.
-            TypeError: If `y` is not numeric.
-        """
-        if self.x not in self.df or self.y not in self.df:
-            raise KeyError(f"Columns not found: x={self.x!r}, y={self.y!r}")
-
-        # y must be numeric for stats
-        if not pd.api.types.is_numeric_dtype(self.df[self.y]):
-            raise TypeError(f"Response column '{self.y}' must be numeric.")
-
-        dfx = self.df[[self.x, self.y]].copy()
-
-        df_missing = dfx[dfx[self.x].isna()]
-        df_excl = None
-        df_clean = dfx[dfx[self.x].notna()]
-
-        if self.exclude_values:
-            mask_excl = df_clean[self.x].isin(self.exclude_values)
-            df_excl = df_clean[mask_excl]
-            df_clean = df_clean[~mask_excl]
-
-        return _Partitions(
-            clean=df_clean.reset_index(drop=True),
-            missing=None if df_missing.empty else df_missing.reset_index(drop=True),
-            excluded=None if (df_excl is None or df_excl.empty) else df_excl.reset_index(drop=True),
-        )
 
     def _blocks_to_df(self, blocks: List[Block]) -> pd.DataFrame:
-        """Convert merged blocks to a tidy DataFrame (clean bins only)."""
+        """Materialize contiguous bins from merged blocks.
+
+        We always use **“next-left”** as the right edge, and set the last right
+        edge to **+∞** so that transform/searchsorted works cleanly.
+        """
+        if not blocks:
+            return pd.DataFrame(columns=["left", "right", "n", "sum", "mean", "std", "min", "max"])
+
         rows = []
-        for b in blocks:
-            row = {
-                "left": b.left,
-                "right": b.right,
-                "n": b.n,
-                "sum": b.y_sum,
-                "mean": b.mean(),
-                "std": b.std(),
-                "min": b.y_min,
-                "max": b.y_max,
-            }
-            if self._is_binary_y:
-                pos = int(round(b.y_sum))
-                row.update(
-                    {
-                        "positives": pos,
-                        "negatives": int(b.n - pos),
-                        "rate": row["mean"],
-                    }
+        for i, b in enumerate(blocks):
+            right = blocks[i + 1].left if i < len(blocks) - 1 else np.inf
+            rows.append(
+                dict(
+                    left=b.left,
+                    right=right,
+                    n=b.n,
+                    sum=b.sum,
+                    mean=b.mean,
+                    std=b.std,
+                    min=b.ymin,
+                    max=b.ymax,
                 )
-            rows.append(row)
-        out = pd.DataFrame(rows)
-        # Ensure numeric dtype and stable ordering by left
-        out = out.sort_values("left", kind=self.sort_kind).reset_index(drop=True)
-        return out
+            )
+        return pd.DataFrame(rows)
 
     def _build_full_summary(self) -> pd.DataFrame:
-        """Return final summary table, adding missing/excluded if present.
+        """Compose a summary DataFrame.
 
-        For binary y:
-            - Adds WoE/IV columns and distribution columns.
-            - Adds human-readable interval strings.
-            - Adds rows for missing and each excluded value (one row per value).
-
-        For numeric y:
-            - Returns base stats with appended missing/excluded rows.
+        - For numeric bins: build interval strings and (if binary) WoE/IV.
+        - Append rows for Missing and each Excluded value present in data.
         """
-        clean_bins = self._bins_df.copy()
+        bins = self._bins_df.copy()
+
+        # Interval strings
+        bins["interval"] = [f"[{_format_edge(l)}, {_format_edge(r)})" for l, r in zip(bins["left"], bins["right"])]
+        # Replace first '[' with '(' for the -inf bin
+        bins.at[bins.index[0], "interval"] = "(" + bins.at[bins.index[0], "interval"][1:]
+
+        if self._is_binary_y:
+            # Binary case: derive goods/bads and compute WoE/IV
+            ns = bins["n"].to_numpy()
+            bads = bins["sum"].to_numpy()
+            goods = ns - bads
+            w, iv = woe_iv(goods, bads, smoothing=0.5)
+            out = bins.assign(
+                nsamples=ns,
+                bads=bads,
+                goods=goods,
+                bad_rate=np.divide(bads, ns, out=np.zeros_like(bads, dtype=float), where=ns > 0),
+                woe=w,
+                iv_grp=iv,
+            )
+            out = out[["left", "right", "interval", "nsamples", "bads", "goods", "bad_rate", "woe", "iv_grp"]]
+        else:
+            # Numeric y: just rename n -> nsamples for readability
+            out = bins.rename(columns={"n": "nsamples"})
+            out = out[["left", "right", "interval", "nsamples", "sum", "mean", "std", "min", "max"]]
+
+        # Append Missing/Excluded summaries as their own rows (display-only)
         parts = self._parts
         assert parts is not None
+        rows = [out]
 
-        if not self._is_binary_y:
-            # Numeric y: attach missing/excluded counts only (no WoE/IV)
-            extra_rows = []
-            if parts.missing is not None:
-                extra_rows.append(self._numeric_row_from_df(parts.missing, label="Missing"))
-            if parts.excluded is not None:
-                for val, grp in parts.excluded.groupby(self.x, dropna=False):
-                    extra_rows.append(self._numeric_row_from_df(grp, label=str(val)))
+        # Missing
+        if not parts.missing.empty:
+            if self._is_binary_y:
+                n = len(parts.missing)
+                b = parts.missing[self.y].sum()
+                g = n - b
+                r = 0.0 if n == 0 else b / n
+                rows.append(
+                    pd.DataFrame(
+                        [
+                            dict(
+                                left=np.nan,
+                                right=np.nan,
+                                interval="Missing",
+                                nsamples=n,
+                                bads=b,
+                                goods=g,
+                                bad_rate=r,
+                                woe=np.nan,
+                                iv_grp=0.0,
+                            )
+                        ]
+                    )
+                )
+            else:
+                rows.append(
+                    pd.DataFrame(
+                        [
+                            dict(
+                                left=np.nan,
+                                right=np.nan,
+                                interval="Missing",
+                                nsamples=len(parts.missing),
+                                sum=float(parts.missing[self.y].sum()),
+                                mean=float(parts.missing[self.y].mean()),
+                                std=float(parts.missing[self.y].std(ddof=1)),
+                                min=float(parts.missing[self.y].min()),
+                                max=float(parts.missing[self.y].max()),
+                            )
+                        ]
+                    )
+                )
 
-            if extra_rows:
-                add_df = pd.DataFrame(extra_rows)
-                return pd.concat([clean_bins, add_df], ignore_index=True, sort=False)
-            return clean_bins
+        # Excluded (special) values
+        if self.exclude_values:
+            for val in self.exclude_values:
+                ex_rows = parts.excluded[parts.excluded[self.x] == val]
+                if ex_rows.empty:
+                    continue  # only add if present in data
+                if self._is_binary_y:
+                    n = len(ex_rows)
+                    b = ex_rows[self.y].sum()
+                    g = n - b
+                    r = 0.0 if n == 0 else b / n
+                    rows.append(
+                        pd.DataFrame(
+                            [
+                                dict(
+                                    left=np.nan,
+                                    right=np.nan,
+                                    interval=str(val),
+                                    nsamples=n,
+                                    bads=b,
+                                    goods=g,
+                                    bad_rate=r,
+                                    woe=np.nan,
+                                    iv_grp=0.0,
+                                )
+                            ]
+                        )
+                    )
+                else:
+                    rows.append(
+                        pd.DataFrame(
+                            [
+                                dict(
+                                    left=np.nan,
+                                    right=np.nan,
+                                    interval=str(val),
+                                    nsamples=len(ex_rows),
+                                    sum=float(ex_rows[self.y].sum()),
+                                    mean=float(ex_rows[self.y].mean()),
+                                    std=float(ex_rows[self.y].std(ddof=1)),
+                                    min=float(ex_rows[self.y].min()),
+                                    max=float(ex_rows[self.y].max()),
+                                )
+                            ]
+                        )
+                    )
 
-        # --- Binary y: compute MOB-friendly columns (goods/bads, WoE/IV) ---
+        return pd.concat(rows, ignore_index=True)
 
-        mob = clean_bins.copy()
-        mob.rename(columns={"positives": "bads"}, inplace=True)
-        mob["goods"] = mob["n"] - mob["bads"]
 
-        # Prepare interval labels (for plotting/interpretation)
-        mob["[intervalStart"] = mob["left"]
-        mob["intervalEnd)"] = mob["right"]
-        mob["interval"] = mob.apply(lambda r: f"[{r['left']}, {r['right']})", axis=1)
-
-        # Distributions
-        mob["dist_obs"] = mob["n"] / mob["n"].sum()
-        mob["dist_bads"] = mob["bads"] / mob["bads"].sum() if mob["bads"].sum() > 0 else np.nan
-        mob["dist_goods"] = mob["goods"] / mob["goods"].sum() if mob["goods"].sum() > 0 else np.nan
-
-        # WoE with 0.5 smoothing where needed (avoid ±inf)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            mob["woe"] = np.log(mob["dist_goods"] / mob["dist_bads"])
-        zero_mask = (mob["bads"] == 0) | (mob["goods"] == 0)
-        if zero_mask.any():
-            adj_goods = mob.loc[zero_mask, "goods"] + 0.5
-            adj_bads = mob.loc[zero_mask, "bads"] + 0.5
-            adj_dist_goods = adj_goods / mob["goods"].sum()
-            adj_dist_bads = adj_bads / mob["bads"].sum()
-            mob.loc[zero_mask, "woe"] = np.log(adj_dist_goods / adj_dist_bads)
-
-        # IV contribution
-        with np.errstate(invalid="ignore"):
-            mob["iv_grp"] = (mob["dist_goods"] - mob["dist_bads"]) * mob["woe"]
-
-        # Extend with missing/excluded
-        extras = []
-        if parts.missing is not None:
-            miss = parts.missing
-            extras.append(self._binary_row_from_df(miss, label="Missing"))
-        if parts.excluded is not None:
-            for val, grp in parts.excluded.groupby(self.x, dropna=False):
-                extras.append(self._binary_row_from_df(grp, label=str(val)))
-
-        if extras:
-            add_df = pd.DataFrame(extras)
-            # Align columns (fill missing with NaN), keep clean bins first
-            cols = list(mob.columns)
-            add_df = add_df.reindex(columns=cols, fill_value=np.nan)
-            out = pd.concat([mob, add_df], ignore_index=True, sort=False)
-        else:
-            out = mob
-
-        return out
-
-    # -------------------------- helpers: summary rows -------------------------- #
-
-    def _numeric_row_from_df(self, dfsub: pd.DataFrame, label: str) -> dict:
-        """Build a numeric-y summary row from a small df slice for output."""
-        y = dfsub[self.y].to_numpy()
-        n = int(y.size)
-        y_sum = float(y.sum())
-        mean = float(y_sum / n) if n else np.nan
-        std = float(np.sqrt(np.var(y, ddof=1))) if n > 1 else 0.0
-        return {
-            "left": np.nan,
-            "right": np.nan,
-            "n": n,
-            "sum": y_sum,
-            "mean": mean,
-            "std": std,
-            "min": float(np.min(y)) if n else np.nan,
-            "max": float(np.max(y)) if n else np.nan,
-            # consistent label columns for plotting/helper functions
-            "[intervalStart": label,
-            "intervalEnd)": label,
-            "interval": label,
-        }
-
-    def _binary_row_from_df(self, dfsub: pd.DataFrame, label: str) -> dict:
-        """Build a MOB-style summary row (for missing/excluded slices)."""
-        y = dfsub[self.y].to_numpy()
-        n = int(y.size)
-        bads = int(y.sum())
-        goods = n - bads
-        rate = bads / n if n else np.nan
-        return {
-            "left": np.nan,
-            "right": np.nan,
-            "n": n,
-            "sum": float(bads),
-            "mean": float(rate),
-            "std": float(np.sqrt(rate * (1 - rate))) if n > 1 else 0.0,
-            "min": float(np.min(y)) if n else np.nan,
-            "max": float(np.max(y)) if n else np.nan,
-            "bads": bads,
-            "goods": goods,
-            "rate": rate,
-            "[intervalStart": label,
-            "intervalEnd)": label,
-            "interval": label,
-            "dist_obs": np.nan,
-            "dist_bads": np.nan,
-            "dist_goods": np.nan,
-            "woe": np.nan,
-            "iv_grp": np.nan,
-        }
-
-    # --------------------------------------------------------------------- #
-    # Representation
-    # --------------------------------------------------------------------- #
-
-    def __repr__(self) -> str:
-        cls = self.__class__.__name__
-        bins = None if self._bins_df is None else len(self._bins_df)
-        return f"{cls}(x={self.x!r}, y={self.y!r}, metric={self.metric!r}, sign={self.sign!r}, bins={bins})"
+def _format_edge(v: float) -> str:
+    """Compact, human-friendly tick label for interval edges."""
+    if np.isneginf(v):
+        return "-inf"
+    if np.isposinf(v):
+        return "inf"
+    s = f"{v:.12g}"  # enough precision w/o sci jitter
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s

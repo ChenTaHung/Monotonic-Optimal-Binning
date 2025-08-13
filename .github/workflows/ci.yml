@@ -1,0 +1,84 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+# Prevent overlapping runs on the same branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: pytest (py${{ matrix.python-version }} • ubuntu)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install package + deps
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip wheel
+          # Install project (src/ layout)
+          pip install -e .
+          # If you keep a requirements file, install it too (safe if absent)
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          # Test dependencies (in case not listed in requirements.txt)
+          pip install pytest hypothesis
+
+      - name: Run tests
+        run: pytest -q
+
+  lint:
+    name: ruff lint
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install ruff
+      - name: Ruff
+        run: ruff check .
+
+  typecheck:
+    name: mypy (soft)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          # Typical stubs you might need; adjust as your project evolves
+          pip install mypy pandas-stubs types-setuptools types-requests
+      - name: mypy
+        run: mypy src

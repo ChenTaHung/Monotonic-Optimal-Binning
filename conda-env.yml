@@ -1,0 +1,22 @@
+name: mobpy-2.0
+channels:
+  - conda-forge
+dependencies:
+  # Core language/runtime
+  - python=3.11
+  - pip>=24
+
+  # Runtime (matches requirements.txt)
+  - numpy>=1.23
+  - pandas>=1.5
+
+  # Optional but handy to have in the environment so examples/plots & tests run out of the box
+  - matplotlib>=3.7
+
+  # Dev / testing
+  - pytest>=8
+  - hypothesis>=6
+
+  # Install this project in editable mode
+  - pip:
+      - -e .

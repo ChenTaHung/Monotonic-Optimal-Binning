@@ -1,22 +1,61 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "MOBPY"
-version = "1.1.1"
-authors = [
-  { name="Ta-Hung (Denny) Chen", email="denny20700@gmail.com" }
-]
-description = "MOB is a statistical approach to transform continuous variables into optimal and monotonic categorical variables."
+version = "2.0.0"
+description = "Monotone optimal binning (MOB) via PAVA with constraints, plus plotting utilities."
 readme = "README.md"
 requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "Denny Chen" , email = "denny20700@gmail.com" }]
+keywords = ["binning", "woe", "iv", "pava", "isotonic", "credit-risk", "monotonic"]
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+# Minimal runtime deps (plotting is optional, see [project.optional-dependencies])
+dependencies = [
+  "numpy>=1.23",
+  "pandas>=1.5",
+]
+
+[project.optional-dependencies]
+# Install with:  pip install ".[plot]"
+plot = [
+  "matplotlib>=3.7",
+]
+# Install with:  pip install ".[dev]"
+dev = [
+  "pytest>=8",
+  "hypothesis>=6",
+  "matplotlib>=3.7",  # so plot tests/examples run under dev
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/ChenTaHung/Monotonic-Optimal-Binning"
-"Bug Tracker" = "https://github.com/ChenTaHung/Monotonic-Optimal-Binning/issues"
+Homepage = "https://github.com/ChenTaHung/Monotonic-Optimal-Binning"
+Repository = "https://github.com/ChenTaHung/Monotonic-Optimal-Binning"
+Issues = "https://github.com/ChenTaHung/Monotonic-Optimal-Binning/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["MOBPY*"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
