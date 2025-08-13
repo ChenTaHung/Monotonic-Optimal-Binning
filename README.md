@@ -1,7 +1,7 @@
 <h1><p align = 'center'><strong> Monotonic-Optimal-Binning </strong> </p></h1>
 
-[![Run Tests](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/actions/workflows/RunTests.yml)
-[![Formatting Tests](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/actions/workflows/lint.yml/badge.svg)](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/actions/workflows/FormattingTests.yml)
+[![Run Tests](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/actions/workflows/RunTests.yml/badge.svg?branch=main)](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/actions/workflows/RunTests.yml)
+[![Formatting Tests](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/actions/workflows/FormattingTests.yml/badge.svg)](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/actions/workflows/FormattingTests.yml)
 
 <h3><p align = 'center'><strong> Python implementation (MOBPY) </strong> </p></h3>
 

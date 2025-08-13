@@ -151,7 +151,6 @@ def test_property_binary_pipeline(data_excl, cons):
     ).fit()
 
     bins = binner.bins_()
-    summary = binner.summary_()
     assert not bins.empty
 
     # Structural edges
