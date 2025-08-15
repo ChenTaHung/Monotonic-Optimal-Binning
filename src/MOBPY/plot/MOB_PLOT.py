@@ -1,199 +1,769 @@
-from __future__ import annotations
+"""Monotonic Optimal Binning results visualization.
 
-import matplotlib
-# Use a non-interactive backend for headless/test environments
-matplotlib.use("Agg")  # safe no-op if already set
-import matplotlib.pyplot as plt
+This module provides plotting functions for visualizing the final binning results,
+including WoE patterns, event rates, and bin distributions.
+"""
+
+from typing import Dict, List, Optional, Tuple, Union, Any
+import warnings
+
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+import matplotlib.ticker as mticker
+
+from MOBPY.exceptions import DataError, NotFittedError
+from MOBPY.config import get_config
+from MOBPY.logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 
-class MOBPlot:
-    """Static plotting utilities for MOB-like summaries."""
+def plot_woe_bars(
+    summary_df: pd.DataFrame,
+    *,
+    ax: Optional[Axes] = None,
+    figsize: Tuple[float, float] = (10, 6),
+    title: Optional[str] = None,
+    bar_color: str = "steelblue",
+    positive_color: str = "darkgreen",
+    negative_color: str = "darkred",
+    show_values: bool = True,
+    show_iv: bool = True,
+    rotation: int = 45,
+    bar_width: float = 0.8,
+) -> Axes:
+    """Plot Weight of Evidence (WoE) as bars for each bin.
+    
+    For binary targets, visualizes the WoE values which indicate the
+    predictive power of each bin. Positive WoE suggests lower risk,
+    negative WoE suggests higher risk.
+    
+    Args:
+        summary_df: Summary DataFrame from binner.summary_() with WoE column.
+        ax: Matplotlib axes to plot on. If None, creates new figure.
+        figsize: Figure size if creating new figure.
+        title: Plot title. If None, uses default.
+        bar_color: Color for bars (used if not using positive/negative colors).
+        positive_color: Color for positive WoE bars.
+        negative_color: Color for negative WoE bars.
+        show_values: Whether to show WoE values on bars.
+        show_iv: Whether to show IV values in subtitle.
+        rotation: Rotation angle for x-axis labels.
+        bar_width: Width of bars (0-1).
+        
+    Returns:
+        Axes object with the plot.
+        
+    Raises:
+        DataError: If required columns are missing.
+        
+    Examples:
+        >>> binner = MonotonicBinner(df, x='age', y='default')
+        >>> binner.fit()
+        >>> summary = binner.summary_()
+        >>> ax = plot_woe_bars(summary)
+        >>> plt.show()
+    """
+    # Create figure if needed
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    
+    # Validate input
+    if 'woe' not in summary_df.columns:
+        raise DataError("summary_df must have 'woe' column. Ensure target is binary.")
+    
+    if 'bucket' not in summary_df.columns:
+        raise DataError("summary_df must have 'bucket' column")
+    
+    # Filter to bins with valid WoE (exclude Missing/Excluded with NaN WoE)
+    plot_df = summary_df[summary_df['woe'].notna()].copy()
+    
+    if len(plot_df) == 0:
+        raise DataError("No bins with valid WoE values to plot")
+    
+    # Prepare data
+    buckets = plot_df['bucket'].values
+    woe_values = plot_df['woe'].values
+    positions = np.arange(len(buckets))
+    
+    # Determine bar colors
+    if positive_color and negative_color:
+        colors = [positive_color if w >= 0 else negative_color for w in woe_values]
+    else:
+        colors = bar_color
+    
+    # Create bars
+    bars = ax.bar(
+        positions,
+        woe_values,
+        width=bar_width,
+        color=colors,
+        edgecolor='black',
+        linewidth=1,
+        alpha=0.8
+    )
+    
+    # Add value labels on bars
+    if show_values:
+        for i, (bar, woe) in enumerate(zip(bars, woe_values)):
+            height = bar.get_height()
+            y_pos = height + 0.01 if height >= 0 else height - 0.01
+            va = 'bottom' if height >= 0 else 'top'
+            
+            ax.text(
+                bar.get_x() + bar.get_width()/2,
+                y_pos,
+                f'{woe:.3f}',
+                ha='center',
+                va=va,
+                fontsize=9,
+                fontweight='bold'
+            )
+    
+    # Add horizontal line at y=0
+    ax.axhline(y=0, color='black', linestyle='-', linewidth=1)
+    
+    # Styling
+    ax.set_xticks(positions)
+    ax.set_xticklabels(buckets, rotation=rotation, ha='right' if rotation > 0 else 'center')
+    ax.set_xlabel('Bins', fontsize=12)
+    ax.set_ylabel('Weight of Evidence (WoE)', fontsize=12)
+    
+    # Title
+    if title is None:
+        title = 'Weight of Evidence by Bin'
+    
+    # Add IV to title if requested
+    if show_iv and 'iv' in summary_df.columns:
+        total_iv = summary_df['iv'].sum()
+        title += f'\n(Total IV: {total_iv:.4f})'
+    
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    
+    # Grid
+    ax.grid(True, alpha=0.3, axis='y', linestyle='--')
+    
+    # Add legend if using colored bars
+    if positive_color and negative_color:
+        pos_patch = mpatches.Patch(color=positive_color, label='Positive WoE (lower risk)')
+        neg_patch = mpatches.Patch(color=negative_color, label='Negative WoE (higher risk)')
+        ax.legend(handles=[pos_patch, neg_patch], loc='best', frameon=True)
+    
+    return ax
 
-    @staticmethod
-    def plot_bins_summary(
-        summary: pd.DataFrame,
-        *,
-        figsize=(12, 7),
-        dpi: int = 120,
-        bar_alpha: float = 0.55,
-        bar_width: float = 0.6,
-        annotate: bool = True,
-        title: str | None = None,
-        savepath: str | None = None,
-    ) -> None:
-        """Plot WoE bars + Bad Rate line from a MOB-style summary.
 
-        Styling:
-        - Bad Rate line = orange; points = red; point labels = red.
-        - Data percentage text near WoE=0 baseline = black.
-        - WoE value at bar tip = blue (above if positive, below if negative).
-        - Legend placed at top-center; explanatory note sits between legend and chart.
-        - Y-limits expanded to keep annotations inside the frame.
-
-        Args:
-            summary: DataFrame from `MonotonicBinner.summary_()` (binary y), with:
-                     ['interval','nsamples','bads','goods','bad_rate','woe','iv_grp']
-            figsize: Figure size in inches.
-            dpi: Matplotlib DPI.
-            bar_alpha: Alpha for WoE bars.
-            bar_width: Width of bars.
-            annotate: Whether to annotate values on the plot.
-            title: Optional title string; defaults to IV total.
-            savepath: Optional path to save the figure.
-        """
-        req = {"interval", "nsamples", "bads", "goods", "bad_rate", "woe", "iv_grp"}
-        missing = req - set(summary.columns)
-        if missing:
-            raise ValueError(f"summary missing required columns: {sorted(missing)}")
-
-        df = summary.copy().reset_index(drop=True)
-
-        # Keep only numeric interval rows (skip Missing/Excluded)
-        numeric_mask = df["interval"].astype(str).str.contains(r"[\[\(].*,.*\)").fillna(False)
-        bins = df[numeric_mask].copy()
-        if bins.empty:
-            raise ValueError("No numeric bins found to plot.")
-
-        x = np.arange(len(bins))
-        intervals = bins["interval"].astype(str).tolist()
-
-        woe = bins["woe"].to_numpy(dtype=float)
-        bad_rate = bins["bad_rate"].to_numpy(dtype=float)
-
-        # Observations share per bin (for data % labels)
-        ns = bins["nsamples"].to_numpy(dtype=float)
-        ns_share = ns / float(ns.sum()) if ns.sum() > 0 else np.zeros_like(ns)
-
-        fig, ax1 = plt.subplots(figsize=figsize, dpi=dpi)
-
-        # Reserve extra room at the top for legend and explanatory note,
-        # and a bit at bottom for x tick labels.
-        fig.subplots_adjust(top=0.78, bottom=0.18)
-
-        # ---------------- WoE bars (primary y-axis) ---------------- #
-        bars = ax1.bar(x, woe, width=bar_width, alpha=bar_alpha, label="WoE")
-        ax1.axhline(0.0, linewidth=1.0, color="black", alpha=0.7)
-
-        ax1.set_xticks(x, intervals, rotation=0)
-        ax1.set_ylabel("WoE")
-
-        # ---------------- Bad rate line (secondary y-axis) ---------------- #
-        ax2 = ax1.twinx()
-        # Line = orange, scatter = red
-        line = ax2.plot(
-            x, bad_rate, marker=None, linestyle="-", linewidth=2.0, color="#ff7f0e", label="Bad rate (line)"
+def plot_event_rate(
+    summary_df: pd.DataFrame,
+    *,
+    ax: Optional[Axes] = None,
+    figsize: Tuple[float, float] = (10, 6),
+    title: Optional[str] = None,
+    bar_color: str = "lightblue",
+    line_color: str = "red",
+    show_counts: bool = True,
+    show_rate_values: bool = True,
+    rotation: int = 45,
+    y_format: str = "percentage",
+) -> Axes:
+    """Plot event rate (mean of y) by bin with sample sizes.
+    
+    Shows both the event rate as bars and optionally the sample count,
+    useful for assessing both the pattern and the reliability of each bin.
+    
+    Args:
+        summary_df: Summary DataFrame from binner.summary_().
+        ax: Matplotlib axes to plot on. If None, creates new figure.
+        figsize: Figure size if creating new figure.
+        title: Plot title. If None, uses default.
+        bar_color: Color for count bars.
+        line_color: Color for event rate line.
+        show_counts: Whether to show sample counts as bars.
+        show_rate_values: Whether to show rate values on the line.
+        rotation: Rotation angle for x-axis labels.
+        y_format: Format for y-axis ('percentage' or 'decimal').
+        
+    Returns:
+        Axes object with the plot.
+        
+    Examples:
+        >>> summary = binner.summary_()
+        >>> ax = plot_event_rate(summary, show_counts=True)
+        >>> plt.show()
+    """
+    # Create figure if needed
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    
+    # Validate input
+    required_cols = {'bucket', 'mean', 'count'}
+    if not required_cols.issubset(summary_df.columns):
+        missing = required_cols - set(summary_df.columns)
+        raise DataError(f"summary_df missing required columns: {missing}")
+    
+    # Prepare data
+    buckets = summary_df['bucket'].values
+    event_rates = summary_df['mean'].values
+    counts = summary_df['count'].values
+    positions = np.arange(len(buckets))
+    
+    # Create twin axis for different scales
+    ax2 = ax.twinx()
+    
+    # Plot counts as bars (if requested)
+    if show_counts:
+        bars = ax.bar(
+            positions,
+            counts,
+            width=0.8,
+            color=bar_color,
+            edgecolor='black',
+            linewidth=1,
+            alpha=0.6,
+            label='Sample count'
         )
-        pts = ax2.scatter(x, bad_rate, color="red", label="Bad rate (points)", zorder=3)
-        ax2.set_ylabel("Bad Rate")
+        
+        # Add count labels on bars
+        for bar, count in zip(bars, counts):
+            ax.text(
+                bar.get_x() + bar.get_width()/2,
+                bar.get_height() + ax.get_ylim()[1] * 0.01,
+                f'{int(count):,}',
+                ha='center',
+                va='bottom',
+                fontsize=8
+            )
+    
+    # Plot event rate as line
+    if y_format == "percentage":
+        plot_rates = event_rates * 100
+        rate_label = 'Event rate (%)'
+    else:
+        plot_rates = event_rates
+        rate_label = 'Event rate'
+    
+    line = ax2.plot(
+        positions,
+        plot_rates,
+        'o-',
+        color=line_color,
+        linewidth=2.5,
+        markersize=8,
+        markeredgecolor='white',
+        markeredgewidth=2,
+        label=rate_label
+    )
+    
+    # Add rate values on the line
+    if show_rate_values:
+        for i, (pos, rate) in enumerate(zip(positions, plot_rates)):
+            format_str = f'{rate:.1f}%' if y_format == "percentage" else f'{rate:.3f}'
+            ax2.text(
+                pos,
+                rate + (ax2.get_ylim()[1] - ax2.get_ylim()[0]) * 0.02,
+                format_str,
+                ha='center',
+                va='bottom',
+                fontsize=9,
+                fontweight='bold',
+                color=line_color
+            )
+    
+    # Styling
+    ax.set_xticks(positions)
+    ax.set_xticklabels(buckets, rotation=rotation, ha='right' if rotation > 0 else 'center')
+    ax.set_xlabel('Bins', fontsize=12)
+    
+    if show_counts:
+        ax.set_ylabel('Sample Count', fontsize=12, color='black')
+        ax.tick_params(axis='y', labelcolor='black')
+    
+    ax2.set_ylabel(rate_label, fontsize=12, color=line_color)
+    ax2.tick_params(axis='y', labelcolor=line_color)
+    
+    # Format y-axis
+    if y_format == "percentage":
+        ax2.yaxis.set_major_formatter(mticker.PercentFormatter(decimals=1))
+    
+    # Title
+    if title is None:
+        title = 'Event Rate and Sample Distribution by Bin'
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    
+    # Grid
+    ax.grid(True, alpha=0.3, axis='y', linestyle='--')
+    
+    # Legend
+    if show_counts:
+        # Combine legends from both axes
+        lines1, labels1 = ax.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax.legend(lines1 + lines2, labels1 + labels2, loc='best', frameon=True)
+    
+    return ax
 
-        # ---------------- Compute y-limits for WoE axis (to avoid clipping) ---------------- #
-        if len(woe) > 0:
-            w_abs_max = max(1e-6, float(np.max(np.abs(woe))))
-            base_span = max(w_abs_max * 1.6, 0.6)  # ensure a minimum visual span
-            top = max(woe.max(), 0.0) + 0.25 * w_abs_max + 0.15
-            bot = min(woe.min(), 0.0) - 0.25 * w_abs_max - 0.15
-            if top - bot < base_span:
-                mid = 0.0
-                top = mid + base_span / 2.0
-                bot = mid - base_span / 2.0
-            ax1.set_ylim(bot, top)
 
-        # ---------------- Annotations ---------------- #
-        if annotate:
-            # 1) Annotate each Bad Rate point value (red text) above the point
-            for xi, br in zip(x, bad_rate):
-                ax2.annotate(
-                    f"{br:.2%}",
-                    xy=(xi, br),
-                    xytext=(0, 8),
-                    textcoords="offset points",
-                    ha="center",
-                    va="bottom",
-                    fontsize=9,
-                    color="red",
-                    weight="bold",
-                )
-
-            # 2) Data % near the WoE=0 baseline (black)
-            y0 = 0.0
-            ylim = ax1.get_ylim()
-            y_span = (ylim[1] - ylim[0]) if (ylim[1] > ylim[0]) else 1.0
-            base_offset = 0.03 * y_span
-
-            for xi, share, w in zip(x, ns_share, woe):
-                y_text = y0 + (base_offset if w >= 0 else -base_offset)
-                ax1.annotate(
-                    f"{share:.1%}",
-                    xy=(xi, y_text),
-                    xytext=(0, 0),
-                    textcoords="offset points",
-                    ha="center",
-                    va="center",
-                    fontsize=9,
-                    color="black",
-                    weight="bold",
-                )
-
-            # 3) WoE at the tip of the bar (blue)
-            for xi, w in zip(x, woe):
-                if w >= 0:
-                    xytext = (0, 8)
-                    va = "bottom"
-                else:
-                    xytext = (0, -8)
-                    va = "top"
-                ax1.annotate(
-                    f"{w:.3f}",
-                    xy=(xi, w),
-                    xytext=xytext,
-                    textcoords="offset points",
-                    ha="center",
-                    va=va,
-                    fontsize=9,
-                    color="#1f77b4",
-                    weight="bold",
-                )
-
-        # ---------------- Titles / Legend / Note ---------------- #
-        iv_total = float(bins["iv_grp"].sum())
-        if title is None:
-            title = f"Bins Summary (IV = {iv_total:.4f})"
-        ax1.set_title(title)
-        ax1.grid(True, axis="y", alpha=0.2)
-
-        # Combined legend (bars + line + points), positioned at the top-center
-        handles = [bars, line[0], pts]
-        labels = ["WoE", "Bad rate (line)", "Bad rate (points)"]
-        ax1.legend(
-            handles,
-            labels,
-            loc="upper center",
-            bbox_to_anchor=(0.5, 1.25),  # higher to create room for note
-            ncol=3,
-            frameon=False,
+def plot_bin_statistics(
+    binner,
+    *,
+    figsize: Tuple[float, float] = (15, 10),
+    title: Optional[str] = None,
+) -> Figure:
+    """Create comprehensive visualization of binning results.
+    
+    Creates a multi-panel plot showing:
+    1. WoE pattern (if binary target)
+    2. Event rate by bin
+    3. Sample distribution
+    4. Bin boundaries on original data
+    
+    Args:
+        binner: Fitted MonotonicBinner instance.
+        figsize: Figure size.
+        title: Overall figure title.
+        
+    Returns:
+        Figure object with subplots.
+        
+    Raises:
+        NotFittedError: If binner is not fitted.
+        
+    Examples:
+        >>> binner = MonotonicBinner(df, x='age', y='default')
+        >>> binner.fit()
+        >>> fig = plot_bin_statistics(binner)
+        >>> plt.show()
+    """
+    # Check if fitted
+    if not hasattr(binner, '_is_fitted') or not binner._is_fitted:
+        raise NotFittedError("Binner must be fitted first")
+    
+    # Get data
+    summary = binner.summary_()
+    bins = binner.bins_()
+    is_binary = binner._is_binary_y
+    
+    # Determine layout based on target type
+    if is_binary:
+        fig, axes = plt.subplots(2, 2, figsize=figsize)
+        axes = axes.flatten()
+    else:
+        fig, axes = plt.subplots(2, 2, figsize=figsize)
+        axes = axes.flatten()
+    
+    # Plot 1: WoE bars (binary only) or Event rate
+    if is_binary and 'woe' in summary.columns:
+        plot_woe_bars(summary, ax=axes[0], title='Weight of Evidence Pattern')
+    else:
+        # For non-binary, show event rate in first panel
+        plot_event_rate(
+            summary,
+            ax=axes[0],
+            title='Mean Target Value by Bin',
+            show_counts=False,
+            y_format='decimal'
         )
+    
+    # Plot 2: Event rate with counts
+    plot_event_rate(
+        summary,
+        ax=axes[1],
+        title='Event Rate and Sample Distribution',
+        show_counts=True,
+        y_format='percentage' if is_binary else 'decimal'
+    )
+    
+    # Plot 3: Sample distribution
+    plot_sample_distribution(
+        summary,
+        ax=axes[2],
+        title='Sample Distribution Across Bins'
+    )
+    
+    # Plot 4: Bin boundaries on data
+    plot_bin_boundaries(
+        binner,
+        ax=axes[3],
+        title='Bin Boundaries on Original Data'
+    )
+    
+    # Overall title
+    if title is None:
+        target_type = "Binary" if is_binary else "Continuous"
+        title = f'Monotonic Optimal Binning Results: {binner.x} → {binner.y} ({target_type} Target)'
+    
+    fig.suptitle(title, fontsize=16, fontweight='bold')
+    fig.tight_layout()
+    
+    return fig
 
-        # Explanatory note positioned *between* legend and chart.
-        # We place it in axes coordinates slightly above the top of the axes (y > 1).
-        note = "Text colors – Blue: WoE at bar tip • Black: Data % near WoE=0 • Red: Bad Rate at points"
-        ax1.text(
-            0.5,
-            1.12,  # between legend (~1.25) and axes top (1.0)
-            note,
-            transform=ax1.transAxes,
-            ha="center",
-            va="bottom",
-            fontsize=9,
-            color="gray",
-            clip_on=False,
+
+def plot_sample_distribution(
+    summary_df: pd.DataFrame,
+    *,
+    ax: Optional[Axes] = None,
+    figsize: Tuple[float, float] = (10, 6),
+    title: Optional[str] = None,
+    color: str = "skyblue",
+    show_percentages: bool = True,
+    show_cumulative: bool = True,
+    rotation: int = 45,
+) -> Axes:
+    """Plot distribution of samples across bins.
+    
+    Shows how data is distributed across bins, useful for identifying
+    bins that may be too small or too large.
+    
+    Args:
+        summary_df: Summary DataFrame from binner.summary_().
+        ax: Matplotlib axes. If None, creates new figure.
+        figsize: Figure size if creating new figure.
+        title: Plot title.
+        color: Bar color.
+        show_percentages: Whether to show percentage labels.
+        show_cumulative: Whether to show cumulative percentage line.
+        rotation: Rotation for x-axis labels.
+        
+    Returns:
+        Axes object with the plot.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    
+    # Prepare data
+    buckets = summary_df['bucket'].values
+    counts = summary_df['count'].values
+    percentages = summary_df['count_pct'].values if 'count_pct' in summary_df else counts / counts.sum() * 100
+    positions = np.arange(len(buckets))
+    
+    # Create bars
+    bars = ax.bar(
+        positions,
+        percentages,
+        color=color,
+        edgecolor='black',
+        linewidth=1,
+        alpha=0.8
+    )
+    
+    # Add percentage labels
+    if show_percentages:
+        for bar, pct in zip(bars, percentages):
+            ax.text(
+                bar.get_x() + bar.get_width()/2,
+                bar.get_height() + 0.5,
+                f'{pct:.1f}%',
+                ha='center',
+                va='bottom',
+                fontsize=9
+            )
+    
+    # Add cumulative line
+    if show_cumulative:
+        ax2 = ax.twinx()
+        cumulative = np.cumsum(percentages)
+        ax2.plot(
+            positions,
+            cumulative,
+            'ro-',
+            linewidth=2,
+            markersize=6,
+            label='Cumulative %'
         )
+        ax2.set_ylabel('Cumulative Percentage', fontsize=12, color='red')
+        ax2.tick_params(axis='y', labelcolor='red')
+        ax2.set_ylim(0, 105)
+        
+        # Add 50% reference line
+        ax2.axhline(y=50, color='red', linestyle='--', alpha=0.5)
+    
+    # Styling
+    ax.set_xticks(positions)
+    ax.set_xticklabels(buckets, rotation=rotation, ha='right' if rotation > 0 else 'center')
+    ax.set_xlabel('Bins', fontsize=12)
+    ax.set_ylabel('Percentage of Samples', fontsize=12)
+    ax.set_ylim(0, max(percentages) * 1.15)
+    
+    if title is None:
+        title = 'Sample Distribution Across Bins'
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    
+    # Grid
+    ax.grid(True, alpha=0.3, axis='y', linestyle='--')
+    
+    return ax
 
-        # Final layout and optional save:
-        # Use rect to keep reserved top space for legend + note and bottom for ticks.
-        fig.tight_layout(rect=[0.04, 0.10, 1.00, 0.82])
-        if savepath:
-            fig.patch.set_facecolor("white")
-            fig.savefig(savepath, dpi=dpi, bbox_inches="tight")
-        plt.close(fig)
+
+def plot_bin_boundaries(
+    binner,
+    *,
+    ax: Optional[Axes] = None,
+    figsize: Tuple[float, float] = (10, 6),
+    title: Optional[str] = None,
+    n_samples: int = 1000,
+    show_density: bool = True,
+    show_boundaries: bool = True,
+    show_means: bool = True,
+    alpha: float = 0.6,
+) -> Axes:
+    """Plot bin boundaries overlaid on the original data distribution.
+    
+    Visualizes where the bin cuts are made on the original feature distribution.
+    
+    Args:
+        binner: Fitted MonotonicBinner instance.
+        ax: Matplotlib axes. If None, creates new figure.
+        figsize: Figure size if creating new figure.
+        title: Plot title.
+        n_samples: Max samples to plot (for performance).
+        show_density: Whether to show density plot.
+        show_boundaries: Whether to show bin boundaries.
+        show_means: Whether to show bin means.
+        alpha: Transparency for density plot.
+        
+    Returns:
+        Axes object with the plot.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    
+    # Get clean data
+    clean_data = binner._parts.clean if hasattr(binner, '_parts') else binner.df
+    x_data = clean_data[binner.x].dropna()
+    y_data = clean_data[binner.y].dropna()
+    
+    # Sample if too large
+    if len(x_data) > n_samples:
+        indices = np.random.choice(len(x_data), n_samples, replace=False)
+        x_data = x_data.iloc[indices]
+        y_data = y_data.iloc[indices]
+    
+    # Get bins
+    bins_df = binner.bins_()
+    
+    # Plot data distribution
+    if show_density:
+        # Create histogram
+        counts, bin_edges, patches = ax.hist(
+            x_data,
+            bins=50,
+            density=True,
+            alpha=alpha,
+            color='lightblue',
+            edgecolor='black',
+            linewidth=0.5
+        )
+        ax.set_ylabel('Density', fontsize=12)
+    else:
+        # Scatter plot
+        ax.scatter(
+            x_data,
+            y_data,
+            alpha=0.5,
+            s=10,
+            c='blue'
+        )
+        ax.set_ylabel(binner.y, fontsize=12)
+    
+    # Plot bin boundaries
+    if show_boundaries:
+        # Get unique boundaries (excluding -inf and inf)
+        boundaries = []
+        for _, row in bins_df.iterrows():
+            if not np.isneginf(row['left']):
+                boundaries.append(row['left'])
+            if not np.isposinf(row['right']):
+                boundaries.append(row['right'])
+        
+        boundaries = sorted(set(boundaries))
+        
+        # Plot vertical lines at boundaries
+        for boundary in boundaries:
+            ax.axvline(
+                x=boundary,
+                color='red',
+                linestyle='--',
+                linewidth=2,
+                alpha=0.8,
+                label='Bin boundary' if boundary == boundaries[0] else None
+            )
+            
+            # Add boundary value
+            ax.text(
+                boundary,
+                ax.get_ylim()[1] * 0.95,
+                f'{boundary:.2f}',
+                rotation=90,
+                va='top',
+                ha='right',
+                fontsize=8,
+                color='red'
+            )
+    
+    # Plot bin means if requested
+    if show_means and not show_density:
+        ax2 = ax.twinx()
+        
+        # Calculate mean x position for each bin
+        x_positions = []
+        y_means = []
+        
+        for _, row in bins_df.iterrows():
+            # Get data in this bin
+            mask = True
+            if not np.isneginf(row['left']):
+                mask &= (clean_data[binner.x] >= row['left'])
+            if not np.isposinf(row['right']):
+                mask &= (clean_data[binner.x] < row['right'])
+            
+            bin_data = clean_data[mask]
+            if len(bin_data) > 0:
+                x_positions.append(bin_data[binner.x].mean())
+                y_means.append(row['mean'])
+        
+        # Plot means
+        ax2.plot(
+            x_positions,
+            y_means,
+            'ro-',
+            linewidth=2,
+            markersize=8,
+            label='Bin means'
+        )
+        ax2.set_ylabel('Bin Mean', fontsize=12, color='red')
+        ax2.tick_params(axis='y', labelcolor='red')
+    
+    # Styling
+    ax.set_xlabel(binner.x, fontsize=12)
+    
+    if title is None:
+        title = f'Bin Boundaries on {binner.x} Distribution'
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    
+    # Grid
+    ax.grid(True, alpha=0.3, linestyle='--')
+    
+    # Legend
+    if show_boundaries:
+        ax.legend(loc='best', frameon=True)
+    
+    return ax
+
+
+def plot_binning_stability(
+    binner,
+    test_df: pd.DataFrame,
+    *,
+    figsize: Tuple[float, float] = (12, 6),
+    title: Optional[str] = None,
+) -> Figure:
+    """Compare binning performance on training vs test data.
+    
+    Useful for assessing whether the binning generalizes well to new data.
+    
+    Args:
+        binner: Fitted MonotonicBinner instance.
+        test_df: Test DataFrame with same x and y columns.
+        figsize: Figure size.
+        title: Plot title.
+        
+    Returns:
+        Figure with comparison plots.
+        
+    Examples:
+        >>> binner = MonotonicBinner(train_df, x='age', y='default')
+        >>> binner.fit()
+        >>> fig = plot_binning_stability(binner, test_df)
+        >>> plt.show()
+    """
+    # Transform test data
+    test_bins = binner.transform(test_df[binner.x])
+    
+    # Calculate test statistics per bin
+    test_stats = []
+    for bin_label in binner.summary_()['bucket']:
+        if bin_label.startswith('Missing') or bin_label.startswith('Excluded'):
+            continue
+        
+        mask = test_bins == bin_label
+        if mask.sum() > 0:
+            test_stats.append({
+                'bucket': bin_label,
+                'count': mask.sum(),
+                'mean': test_df.loc[mask, binner.y].mean(),
+                'std': test_df.loc[mask, binner.y].std()
+            })
+    
+    test_stats_df = pd.DataFrame(test_stats)
+    
+    # Create comparison plots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+    
+    # Plot 1: Sample distribution comparison
+    train_summary = binner.summary_()
+    numeric_mask = ~train_summary['bucket'].str.contains('Missing|Excluded')
+    
+    x_pos = np.arange(len(test_stats_df))
+    width = 0.35
+    
+    ax1.bar(
+        x_pos - width/2,
+        train_summary.loc[numeric_mask, 'count_pct'],
+        width,
+        label='Train',
+        alpha=0.8
+    )
+    
+    test_pct = test_stats_df['count'] / test_stats_df['count'].sum() * 100
+    ax1.bar(
+        x_pos + width/2,
+        test_pct,
+        width,
+        label='Test',
+        alpha=0.8
+    )
+    
+    ax1.set_xlabel('Bins')
+    ax1.set_ylabel('Percentage of Samples')
+    ax1.set_title('Sample Distribution: Train vs Test')
+    ax1.set_xticks(x_pos)
+    ax1.set_xticklabels(test_stats_df['bucket'], rotation=45, ha='right')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3, axis='y')
+    
+    # Plot 2: Event rate comparison
+    ax2.plot(
+        x_pos,
+        train_summary.loc[numeric_mask, 'mean'] * 100,
+        'o-',
+        linewidth=2,
+        markersize=8,
+        label='Train'
+    )
+    ax2.plot(
+        x_pos,
+        test_stats_df['mean'] * 100,
+        's-',
+        linewidth=2,
+        markersize=8,
+        label='Test'
+    )
+    
+    ax2.set_xlabel('Bins')
+    ax2.set_ylabel('Event Rate (%)')
+    ax2.set_title('Event Rate: Train vs Test')
+    ax2.set_xticks(x_pos)
+    ax2.set_xticklabels(test_stats_df['bucket'], rotation=45, ha='right')
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+    
+    # Overall title
+    if title is None:
+        title = f'Binning Stability Analysis: {binner.x}'
+    fig.suptitle(title, fontsize=14, fontweight='bold')
+    fig.tight_layout()
+    
+    return fig
