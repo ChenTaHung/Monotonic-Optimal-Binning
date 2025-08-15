@@ -9,9 +9,10 @@ import pandas as pd
 from MOBPY.binning.mob import MonotonicBinner
 from MOBPY.core.constraints import BinningConstraints
 from MOBPY.plot.csd_gcm import (
-    plot_csd_gcm,
+    plot_csd_pava_step,
     plot_gcm_from_binner,
     animate_pava_from_binner,
+    plot_gcm_on_means
 )
 
 # -----------------------------------------------------------------------------
@@ -72,10 +73,10 @@ binner = MonotonicBinner(
 # -----------------------------------------------------------------------------
 bins = binner.bins_()
 summary = binner.summary_()
-print("\n=== Clean bins (first 5) ===")
-print(bins.head())
-print("\n=== Full summary (first 5) ===")
-print(summary.head())
+print("\n=== Clean bins ===")
+print(bins)
+print("\n=== Full summary ===")
+print(summary)
 
 # Check coverage convention: first left is -inf, last right is +inf
 first_left = bins["left"].iloc[0]
@@ -87,7 +88,7 @@ assert math.isinf(last_right) and last_right > 0
 # 4) Plots
 # -----------------------------------------------------------------------------
 # 4a) CSD-like group means + PAVA step (x–y plane)
-plot_csd_gcm(
+plot_csd_pava_step(
     groups_df=binner._pava.groups_,
     blocks=binner._pava.export_blocks(as_dict=True),
     x_name=x_col,
@@ -99,6 +100,7 @@ plot_csd_gcm(
 plot_gcm_from_binner(
     binner,
     savepath=str(IMG_DIR / "gcm_on_csd.png"),
+    annotate_intervals=True
 )
 
 # 4c) MOB summary plot (WoE bars + bad-rate line) — only for binary y
@@ -124,3 +126,12 @@ animate_pava_from_binner(
     annotate_slopes=True,
 )
 print("Saved GIF:", GIF_DIR / "pava_gcm.gif")
+
+plot_gcm_on_means(
+    groups_df=binner._pava.groups_,
+    blocks=binner._pava.export_blocks(as_dict=True),
+    x_name=binner.x,
+    y_name=binner.y,
+    savepath=str(GIF_DIR / "gcm_means.png")
+)
+print("Saved: gcm_means.png")
