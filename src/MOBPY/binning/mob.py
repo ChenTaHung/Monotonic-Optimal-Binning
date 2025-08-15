@@ -256,7 +256,8 @@ class MonotonicBinner:
             self._pava.fit()
             
             self.resolved_sign_ = self._pava.resolved_sign_
-            pava_blocks = self._pava.export_blocks(as_dict=False)
+            # Export blocks as dictionaries for merge_adjacent
+            pava_blocks = self._pava.export_blocks(as_dict=True)
             
             # Validate PAVA result
             if not self._pava.validate_monotonicity():

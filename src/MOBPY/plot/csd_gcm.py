@@ -1,218 +1,496 @@
-from __future__ import annotations
+"""Cumulative Sum Diagram (CSD) and Greatest Convex Minorant (GCM) plotting.
 
-from typing import Iterable, List, Sequence
+This module provides visualization tools for understanding the PAVA algorithm's
+behavior. The CSD shows cumulative sums, while the GCM represents the monotonic
+fit produced by PAVA.
+"""
+
+from typing import Dict, List, Optional, Any, Tuple, Union
+import warnings
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 
-# Color palette (explicit per your request)
-SKYBLUE = "#87CEEB"
-LIGHT_ORANGE = "#FDBA74"
-STRONG_RED = "#EF4444"
-GRID_COLOR = "#D1D5DB"
+from MOBPY.core.pava import PAVA
+from MOBPY.exceptions import DataError
+from MOBPY.config import get_config
+from MOBPY.logging_utils import get_logger
 
-
-def _blocks_to_step_xy(blocks: Sequence[dict | tuple]) -> tuple[np.ndarray, np.ndarray]:
-    """Build (x, y) pairs to draw a right-continuous step from a list of blocks.
-
-    Notes:
-        - Blocks are assumed half-open [left, right) with (-inf, +inf) at extremes.
-        - For plotting, we clamp infinities to just outside the min/max finite x-range.
-    """
-    # Normalize access
-    def _get(b, k, idx):
-        return b[k] if isinstance(b, dict) else b[idx]
-
-    lefts = np.array([_get(b, "left", 0) for b in blocks], dtype=float)
-    rights = np.array([_get(b, "right", 1) for b in blocks], dtype=float)
-    ns = np.array([_get(b, "n", 2) for b in blocks], dtype=float)
-    sums = np.array([_get(b, "sum", 3) for b in blocks], dtype=float)
-    means = np.divide(sums, ns, out=np.zeros_like(sums), where=ns > 0)
-
-    # Build right-continuous step: for each block append (left, m) -> (right, m)
-    xs, ys = [], []
-    for l, r, m in zip(lefts, rights, means):
-        xs.extend([l, r])
-        ys.extend([m, m])
-    xs = np.asarray(xs, float)
-    ys = np.asarray(ys, float)
-
-    # Clamp infinities for display purposes only
-    finite_bounds = np.array([v for v in np.concatenate([lefts, rights]) if np.isfinite(v)], float)
-    if finite_bounds.size:
-        x_min, x_max = finite_bounds.min(), finite_bounds.max()
-        span = max(1.0, x_max - x_min)
-        xs = np.where(np.isneginf(xs), x_min - 0.05 * span, xs)
-        xs = np.where(np.isposinf(xs), x_max + 0.05 * span, xs)
-    return xs, ys
+logger = get_logger(__name__)
 
 
-def plot_csd_pava_step(
-    *,
+def plot_csd(
     groups_df: pd.DataFrame,
-    pava_blocks: List[dict] | List[tuple],
-    merged_blocks: List[dict] | List[tuple] | None = None,
-    x_name: str = "x",
-    y_name: str = "y",
-    figsize=(12, 7),
-    dpi: int = 120,
-    title: str | None = None,
-    savepath: str | None = None,
-) -> None:
-    """Plot group means (points/line), PAVA step, and optional *merged* final step.
-
-    Visual encodings (per your spec):
-      - Group means (by unique x):           skyblue points + line
-      - PAVA monotone step (pre-merge):      light orange step
-      - Final merged step (post-merge):      strong red step overlay
-
-    Args:
-        groups_df: PAVA.groups_ (must contain 'x', 'sum', 'count').
-        pava_blocks: Blocks returned directly by PAVA (before merge-adjacent).
-        merged_blocks: Final blocks after merge-adjacent (optional).
-        x_name, y_name: Axis labels.
-        figsize, dpi, title, savepath: Matplotlib options.
-    """
-    req = {"x", "sum", "count"}
-    if not req.issubset(groups_df.columns):
-        raise ValueError(f"groups_df must include {sorted(req)}.")
-    df = groups_df.sort_values("x").copy()
-    means = df["sum"].to_numpy() / df["count"].to_numpy()
-    xs = df["x"].to_numpy()
-
-    # figure
-    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-    ax.grid(True, color=GRID_COLOR, linewidth=0.6, alpha=0.6)
-
-    # Group means (skyblue)
-    ax.plot(xs, means, marker="o", color=SKYBLUE, label="Group mean", linewidth=1.5)
-
-    # PAVA step (light orange)
-    px, py = _blocks_to_step_xy(pava_blocks)
-    ax.step(px, py, where="post", color=LIGHT_ORANGE, linewidth=2.5, label="PAVA step")
-
-    # Final merged step (red), if provided
-    if merged_blocks is not None and len(merged_blocks) > 0:
-        mx, my = _blocks_to_step_xy(merged_blocks)
-        ax.step(mx, my, where="post", color=STRONG_RED, linewidth=3.2, label="Merged (final)")
-
-    ax.set_xlabel(x_name)
-    ax.set_ylabel(f"mean({y_name})")
-    if title is None:
-        title = "CSD vs. PAVA step (and merged)"
-    ax.set_title(title)
-    ax.legend(loc="best")
-    fig.tight_layout()
-
-    if savepath:
-        fig.patch.set_facecolor("white")
-        fig.savefig(savepath, dpi=dpi, bbox_inches="tight")
-    else:
-        plt.show()
-    plt.close(fig)
-
-
-def plot_gcm_on_csd(
+    blocks: List[Dict[str, Any]],
     *,
-    groups_df: pd.DataFrame,
-    pava_blocks: List[dict] | List[tuple],
-    x_name: str = "x",
-    y_name: str = "y",
-    figsize=(12, 7),
-    dpi: int = 120,
-    title: str | None = None,
-    savepath: str | None = None,
-) -> None:
-    """Plot **GCM on CSD** exactly as requested.
-
-    - Blue line (skyblue): cumulative mean over the sorted unique x groups.
-      We rely on `PAVA.groups_` columns `cum_mean`, computed during `PAVA.fit()`.
-    - Red line: PAVA result rendered as a right-continuous step function.
-      Red labels annotate the `[left, right)` interval at each step's **right** endpoint.
-
+    ax: Optional[Axes] = None,
+    figsize: Tuple[float, float] = (10, 6),
+    title: Optional[str] = None,
+    show_points: bool = True,
+    show_blocks: bool = True,
+    point_color: str = "darkblue",
+    block_color: str = "red",
+    block_alpha: float = 0.3,
+    point_size: float = 50,
+    line_width: float = 2,
+    show_legend: bool = True,
+) -> Axes:
+    """Plot Cumulative Sum Diagram (CSD) with PAVA blocks.
+    
+    The CSD visualizes the cumulative sum of y values against cumulative count,
+    showing how PAVA creates monotonic blocks by pooling adjacent groups.
+    
     Args:
-        groups_df: PAVA.groups_. Must include 'x' and 'cum_mean' columns.
-        pava_blocks: PAVA blocks (list of dicts/tuples).
-        x_name, y_name: Axis labels.
-        figsize, dpi, title, savepath: Matplotlib options.
+        groups_df: DataFrame from PAVA.groups_ with columns ['x', 'count', 'sum'].
+        blocks: List of block dictionaries from PAVA.export_blocks(as_dict=True).
+        ax: Matplotlib axes to plot on. If None, creates new figure.
+        figsize: Figure size if creating new figure.
+        title: Plot title. If None, uses default.
+        show_points: Whether to show individual group points.
+        show_blocks: Whether to show PAVA block regions.
+        point_color: Color for group points.
+        block_color: Color for block regions.
+        block_alpha: Transparency for block regions.
+        point_size: Size of scatter points.
+        line_width: Width of connecting lines.
+        show_legend: Whether to show legend.
+        
+    Returns:
+        Axes object with the plot.
+        
+    Examples:
+        >>> pava = PAVA(df=data, x='age', y='default')
+        >>> pava.fit()
+        >>> ax = plot_csd(pava.groups_, pava.export_blocks(as_dict=True))
+        >>> plt.show()
     """
-    req = {"x", "cum_mean"}
-    if not req.issubset(groups_df.columns):
-        raise ValueError("groups_df must include 'x' and 'cum_mean' (added by PAVA.fit()).")
-
-    df = groups_df.sort_values("x").copy()
-    xs = df["x"].to_numpy(dtype=float)
-    cum_mean = df["cum_mean"].to_numpy(dtype=float)
-
-    # Step arrays for PAVA blocks
-    sx, sy = _blocks_to_step_xy(pava_blocks)
-
-    # figure
-    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-    ax.grid(True, color=GRID_COLOR, linewidth=0.6, alpha=0.6)
-
-    # CSD cumulative mean (skyblue)
-    ax.plot(xs, cum_mean, "o-", color=SKYBLUE, label="CSD (cumulative mean)")
-
-    # PAVA (GCM) as step in red
-    ax.step(sx, sy, where="post", color=STRONG_RED, linewidth=2.8, label="PAVA (GCM)")
-
-    # Interval labels at right endpoints
-    # Normalize accessors for left/right/mean
-    def _get(b, k, idx):
-        return b[k] if isinstance(b, dict) else b[idx]
-
-    lefts = np.array([_get(b, "left", 0) for b in pava_blocks], dtype=float)
-    rights = np.array([_get(b, "right", 1) for b in pava_blocks], dtype=float)
-    ns = np.array([_get(b, "n", 2) for b in pava_blocks], dtype=float)
-    sums = np.array([_get(b, "sum", 3) for b in pava_blocks], dtype=float)
-    means = np.divide(sums, ns, out=np.zeros_like(sums), where=ns > 0)
-
-    # For display: clamp +/-inf slightly outside the finite data range
-    finite = np.array([v for v in np.concatenate([lefts, rights]) if np.isfinite(v)], float)
-    if finite.size:
-        x_min, x_max = finite.min(), finite.max()
-        span = max(1.0, x_max - x_min)
-        r_plot = np.where(np.isposinf(rights), x_max + 0.05 * span, rights)
-        r_plot = np.where(np.isneginf(r_plot), x_min - 0.05 * span, r_plot)
-    else:
-        r_plot = rights
-
-    def _fmt(v: float) -> str:
-        if np.isneginf(v):
-            return "-inf"
-        if np.isposinf(v):
-            return "inf"
-        s = f"{v:.12g}"
-        if "." in s:
-            s = s.rstrip("0").rstrip(".")
-        return s
-
-    for r, l, m in zip(r_plot, lefts, means):
-        ax.annotate(
-            f"[{_fmt(l)},{_fmt(r)})",
-            xy=(r, m),
-            xytext=(2, -10),
-            textcoords="offset points",
-            ha="left",
-            va="top",
-            fontsize=9,
-            color=STRONG_RED,
-            weight="bold",
+    # Create figure if needed
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    
+    # Validate input
+    required_cols = {'count', 'sum'}
+    if not required_cols.issubset(groups_df.columns):
+        missing = required_cols - set(groups_df.columns)
+        raise DataError(f"groups_df missing required columns: {missing}")
+    
+    # Calculate cumulative values
+    cum_count = groups_df['count'].cumsum()
+    cum_sum = groups_df['sum'].cumsum()
+    
+    # Add origin point for better visualization
+    cum_count_with_origin = np.concatenate([[0], cum_count.values])
+    cum_sum_with_origin = np.concatenate([[0], cum_sum.values])
+    
+    # Plot connecting line
+    ax.plot(
+        cum_count_with_origin,
+        cum_sum_with_origin,
+        'o-',
+        color=point_color,
+        linewidth=line_width,
+        alpha=0.6,
+        markersize=4,
+        label='Cumulative path'
+    )
+    
+    # Plot individual points
+    if show_points:
+        ax.scatter(
+            cum_count,
+            cum_sum,
+            c=point_color,
+            s=point_size,
+            alpha=0.8,
+            edgecolors='white',
+            linewidth=1,
+            label='Group points',
+            zorder=5
         )
-
-    ax.set_xlabel(x_name)
-    ax.set_ylabel(f"mean({y_name})")
+    
+    # Plot PAVA blocks
+    if show_blocks and blocks:
+        # Calculate block cumulative positions
+        block_cum_n = 0
+        block_cum_sum = 0
+        
+        for i, block in enumerate(blocks):
+            # Block start position
+            start_n = block_cum_n
+            start_sum = block_cum_sum
+            
+            # Block end position
+            end_n = start_n + block['n']
+            end_sum = start_sum + block['sum']
+            
+            # Draw block line (GCM segment)
+            ax.plot(
+                [start_n, end_n],
+                [start_sum, end_sum],
+                color=block_color,
+                linewidth=line_width * 1.5,
+                alpha=0.8,
+                label='PAVA blocks' if i == 0 else None
+            )
+            
+            # Shade block region
+            if block_alpha > 0:
+                # Create vertices for the polygon
+                vertices = [
+                    (start_n, start_sum),
+                    (end_n, end_sum),
+                    (end_n, 0),
+                    (start_n, 0)
+                ]
+                polygon = mpatches.Polygon(
+                    vertices,
+                    facecolor=block_color,
+                    alpha=block_alpha,
+                    edgecolor='none'
+                )
+                ax.add_patch(polygon)
+            
+            # Update cumulative position
+            block_cum_n = end_n
+            block_cum_sum = end_sum
+    
+    # Styling
+    ax.set_xlabel('Cumulative Count', fontsize=12)
+    ax.set_ylabel('Cumulative Sum of Y', fontsize=12)
+    
     if title is None:
-        title = f'Pool Adjacent Violators : <{x_name}, {y_name}> on "cumMean"'
-    ax.set_title(title)
-    ax.legend(loc="best")
-    fig.tight_layout()
+        title = 'Cumulative Sum Diagram with PAVA Blocks'
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    
+    # Grid
+    ax.grid(True, alpha=0.3, linestyle='--')
+    
+    # Legend
+    if show_legend:
+        ax.legend(loc='best', frameon=True, fancybox=True, shadow=True)
+    
+    # Set axis limits with some padding
+    ax.set_xlim(-cum_count.max() * 0.02, cum_count.max() * 1.02)
+    
+    return ax
 
-    if savepath:
-        fig.patch.set_facecolor("white")
-        fig.savefig(savepath, dpi=dpi, bbox_inches="tight")
-    else:
-        plt.show()
-    plt.close(fig)
+
+def plot_gcm(
+    groups_df: pd.DataFrame,
+    blocks: List[Dict[str, Any]],
+    *,
+    ax: Optional[Axes] = None,
+    figsize: Tuple[float, float] = (10, 6),
+    title: Optional[str] = None,
+    show_means: bool = True,
+    show_blocks: bool = True,
+    mean_color: str = "blue",
+    block_color: str = "red",
+    block_style: str = "step",
+    mean_marker: str = "o",
+    mean_size: float = 50,
+    line_width: float = 2,
+    show_legend: bool = True,
+    show_violations: bool = False,
+) -> Axes:
+    """Plot Greatest Convex Minorant (GCM) showing group means and PAVA fit.
+    
+    The GCM visualizes how PAVA transforms non-monotonic group means into
+    a monotonic step function by pooling adjacent violating groups.
+    
+    Args:
+        groups_df: DataFrame from PAVA.groups_ with columns ['x', 'group_mean'].
+        blocks: List of block dictionaries from PAVA.export_blocks(as_dict=True).
+        ax: Matplotlib axes to plot on. If None, creates new figure.
+        figsize: Figure size if creating new figure.
+        title: Plot title. If None, uses default.
+        show_means: Whether to show original group means.
+        show_blocks: Whether to show PAVA block means.
+        mean_color: Color for original means.
+        block_color: Color for PAVA blocks.
+        block_style: Style for blocks ('step' or 'line').
+        mean_marker: Marker style for means.
+        mean_size: Size of mean markers.
+        line_width: Width of block lines.
+        show_legend: Whether to show legend.
+        show_violations: Whether to highlight monotonicity violations.
+        
+    Returns:
+        Axes object with the plot.
+        
+    Examples:
+        >>> pava = PAVA(df=data, x='age', y='default', sign='+')
+        >>> pava.fit()
+        >>> ax = plot_gcm(pava.groups_, pava.export_blocks(as_dict=True))
+        >>> plt.show()
+    """
+    # Create figure if needed
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    
+    # Validate input
+    if 'x' not in groups_df.columns:
+        raise DataError("groups_df must have 'x' column")
+    
+    # Calculate group means if not present
+    if 'group_mean' not in groups_df.columns:
+        if 'sum' in groups_df.columns and 'count' in groups_df.columns:
+            groups_df = groups_df.copy()
+            groups_df['group_mean'] = groups_df['sum'] / groups_df['count']
+        else:
+            raise DataError("groups_df must have 'group_mean' or 'sum'/'count' columns")
+    
+    # Extract data
+    x_values = groups_df['x'].values
+    y_means = groups_df['group_mean'].values
+    
+    # Plot original means
+    if show_means:
+        ax.scatter(
+            x_values,
+            y_means,
+            c=mean_color,
+            s=mean_size,
+            marker=mean_marker,
+            alpha=0.7,
+            edgecolors='white',
+            linewidth=1,
+            label='Original means',
+            zorder=5
+        )
+        
+        # Connect with light line
+        ax.plot(
+            x_values,
+            y_means,
+            color=mean_color,
+            alpha=0.3,
+            linewidth=1,
+            linestyle='--'
+        )
+    
+    # Highlight violations if requested
+    if show_violations and len(y_means) > 1:
+        # Detect monotonicity direction from blocks
+        if blocks and len(blocks) > 1:
+            # Infer from block means
+            block_means = [b['sum'] / b['n'] for b in blocks if b['n'] > 0]
+            is_increasing = block_means[-1] >= block_means[0]
+        else:
+            is_increasing = True
+        
+        # Find violations
+        for i in range(1, len(y_means)):
+            if is_increasing and y_means[i] < y_means[i-1]:
+                # Increasing violation
+                ax.plot(
+                    [x_values[i-1], x_values[i]],
+                    [y_means[i-1], y_means[i]],
+                    color='red',
+                    linewidth=3,
+                    alpha=0.5,
+                    zorder=4
+                )
+            elif not is_increasing and y_means[i] > y_means[i-1]:
+                # Decreasing violation
+                ax.plot(
+                    [x_values[i-1], x_values[i]],
+                    [y_means[i-1], y_means[i]],
+                    color='red',
+                    linewidth=3,
+                    alpha=0.5,
+                    zorder=4
+                )
+    
+    # Plot PAVA blocks
+    if show_blocks and blocks:
+        block_x = []
+        block_y = []
+        
+        for block in blocks:
+            block_mean = block['sum'] / block['n'] if block['n'] > 0 else 0
+            
+            if block_style == 'step':
+                # Create step function representation
+                left = block['left'] if not np.isneginf(block['left']) else x_values.min() - 0.1 * (x_values.max() - x_values.min())
+                right = block['right'] if not np.isposinf(block['right']) else x_values.max() + 0.1 * (x_values.max() - x_values.min())
+                
+                block_x.extend([left, right])
+                block_y.extend([block_mean, block_mean])
+            else:
+                # Line style: use block center
+                if not np.isneginf(block['left']) and not np.isposinf(block['right']):
+                    center = (block['left'] + block['right']) / 2
+                elif not np.isneginf(block['left']):
+                    center = block['left']
+                elif not np.isposinf(block['right']):
+                    center = block['right']
+                else:
+                    center = x_values.mean()
+                
+                block_x.append(center)
+                block_y.append(block_mean)
+        
+        # Plot blocks
+        if block_style == 'step':
+            # Sort for proper step display
+            sorted_indices = np.argsort(block_x)
+            block_x = np.array(block_x)[sorted_indices]
+            block_y = np.array(block_y)[sorted_indices]
+            
+            ax.step(
+                block_x,
+                block_y,
+                where='post',
+                color=block_color,
+                linewidth=line_width,
+                alpha=0.8,
+                label='PAVA fit'
+            )
+        else:
+            ax.plot(
+                block_x,
+                block_y,
+                'o-',
+                color=block_color,
+                linewidth=line_width,
+                markersize=8,
+                alpha=0.8,
+                label='PAVA fit'
+            )
+    
+    # Styling
+    ax.set_xlabel('X values', fontsize=12)
+    ax.set_ylabel('Mean of Y', fontsize=12)
+    
+    if title is None:
+        title = 'Greatest Convex Minorant (PAVA Fit)'
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    
+    # Grid
+    ax.grid(True, alpha=0.3, linestyle='--')
+    
+    # Legend
+    if show_legend:
+        ax.legend(loc='best', frameon=True, fancybox=True, shadow=True)
+    
+    # Set reasonable axis limits
+    x_margin = (x_values.max() - x_values.min()) * 0.05
+    ax.set_xlim(x_values.min() - x_margin, x_values.max() + x_margin)
+    
+    return ax
+
+
+def plot_pava_animation(
+    pava: PAVA,
+    *,
+    interval: int = 1000,
+    save_path: Optional[str] = None,
+    figsize: Tuple[float, float] = (12, 5),
+    show_csd: bool = True,
+    show_gcm: bool = True,
+) -> Union[None, Any]:
+    """Create animated visualization of PAVA algorithm progress.
+    
+    Shows how PAVA progressively merges groups to achieve monotonicity.
+    This requires matplotlib animation support and is optional.
+    
+    Args:
+        pava: Fitted PAVA instance.
+        interval: Milliseconds between frames.
+        save_path: If provided, saves animation as GIF/MP4.
+        figsize: Figure size.
+        show_csd: Whether to show CSD plot.
+        show_gcm: Whether to show GCM plot.
+        
+    Returns:
+        Animation object if successful, None if animation not available.
+        
+    Notes:
+        Requires additional dependencies:
+        - For GIF: pillow or imagemagick
+        - For MP4: ffmpeg
+    """
+    try:
+        from matplotlib import animation
+    except ImportError:
+        warnings.warn(
+            "Animation requires matplotlib.animation. "
+            "Install with: pip install matplotlib[animation]",
+            UserWarning
+        )
+        return None
+    
+    # Implementation of animation would go here
+    # For now, we'll leave this as a stub
+    logger.info("Animation feature not yet implemented")
+    return None
+
+
+def plot_pava_comparison(
+    binner,
+    *,
+    figsize: Tuple[float, float] = (15, 6),
+    title: Optional[str] = None,
+) -> Figure:
+    """Plot side-by-side comparison of data before and after PAVA.
+    
+    Shows original group means and final PAVA blocks for easy comparison.
+    
+    Args:
+        binner: Fitted MonotonicBinner instance.
+        figsize: Figure size.
+        title: Overall figure title.
+        
+    Returns:
+        Figure object with subplots.
+        
+    Examples:
+        >>> binner = MonotonicBinner(df, x='age', y='default')
+        >>> binner.fit()
+        >>> fig = plot_pava_comparison(binner)
+        >>> plt.show()
+    """
+    # Get PAVA data
+    pava = getattr(binner, '_pava', None)
+    if pava is None or pava.groups_ is None:
+        raise RuntimeError("Binner must be fitted first")
+    
+    groups_df = pava.groups_
+    blocks = pava.export_blocks(as_dict=True)
+    
+    # Create subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+    
+    # Plot CSD
+    plot_csd(
+        groups_df,
+        blocks,
+        ax=ax1,
+        title='Cumulative Sum Diagram',
+        show_legend=True
+    )
+    
+    # Plot GCM
+    plot_gcm(
+        groups_df,
+        blocks,
+        ax=ax2,
+        title='Group Means vs PAVA Fit',
+        show_legend=True,
+        show_violations=True
+    )
+    
+    # Overall title
+    if title is None:
+        direction = "increasing" if binner.resolved_sign_ == "+" else "decreasing"
+        title = f'PAVA Analysis: {binner.x} vs {binner.y} ({direction} monotonicity)'
+    
+    fig.suptitle(title, fontsize=16, fontweight='bold')
+    fig.tight_layout()
+    
+    return fig
