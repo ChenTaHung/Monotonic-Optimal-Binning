@@ -42,9 +42,10 @@ Note:
 
 # Import all plotting functions
 from .csd_gcm import (
-    plot_csd,
+    plot_cumulative_mean,
     plot_gcm,
     plot_pava_comparison,
+    plot_pava_process,
     plot_pava_animation,
 )
 
@@ -59,9 +60,10 @@ from .mob_plot import (
 
 __all__ = [
     # PAVA visualization
-    "plot_csd",
+    "plot_cumulative_mean",
     "plot_gcm", 
     "plot_pava_comparison",
+    "plot_pava_process",
     "plot_pava_animation",
     
     # MOB results visualization
@@ -70,5 +72,5 @@ __all__ = [
     "plot_bin_statistics",
     "plot_sample_distribution",
     "plot_bin_boundaries",
-    "plot_binning_stability",
+    "plot_binning_stability"
 ]

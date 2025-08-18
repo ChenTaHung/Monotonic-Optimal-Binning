@@ -28,9 +28,9 @@ def plot_woe_bars(
     ax: Optional[Axes] = None,
     figsize: Tuple[float, float] = (10, 6),
     title: Optional[str] = None,
-    bar_color: str = "steelblue",
-    positive_color: str = "darkgreen",
-    negative_color: str = "darkred",
+    bar_color: str = "#1976D2",  # Vivid blue
+    positive_color: str = "#388E3C",  # Vivid green
+    negative_color: str = "#D32F2F",  # Vivid red
     show_values: bool = True,
     show_iv: bool = True,
     rotation: int = 45,
@@ -72,6 +72,11 @@ def plot_woe_bars(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     
+    # Remove background and spines
+    ax.set_facecolor('white')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    
     # Validate input
     if 'woe' not in summary_df.columns:
         raise DataError("summary_df must have 'woe' column. Ensure target is binary.")
@@ -102,16 +107,16 @@ def plot_woe_bars(
         woe_values,
         width=bar_width,
         color=colors,
-        edgecolor='black',
-        linewidth=1,
-        alpha=0.8
+        edgecolor='white',
+        linewidth=1.5,
+        alpha=0.9
     )
     
     # Add value labels on bars
     if show_values:
         for i, (bar, woe) in enumerate(zip(bars, woe_values)):
             height = bar.get_height()
-            y_pos = height + 0.01 if height >= 0 else height - 0.01
+            y_pos = height + 0.02 if height >= 0 else height - 0.02
             va = 'bottom' if height >= 0 else 'top'
             
             ax.text(
@@ -120,18 +125,17 @@ def plot_woe_bars(
                 f'{woe:.3f}',
                 ha='center',
                 va=va,
-                fontsize=9,
-                fontweight='bold'
+                fontsize=9
             )
     
     # Add horizontal line at y=0
-    ax.axhline(y=0, color='black', linestyle='-', linewidth=1)
+    ax.axhline(y=0, color='black', linestyle='-', linewidth=1, alpha=0.5)
     
     # Styling
     ax.set_xticks(positions)
     ax.set_xticklabels(buckets, rotation=rotation, ha='right' if rotation > 0 else 'center')
-    ax.set_xlabel('Bins', fontsize=12)
-    ax.set_ylabel('Weight of Evidence (WoE)', fontsize=12)
+    ax.set_xlabel('Bins', fontsize=11)
+    ax.set_ylabel('Weight of Evidence (WoE)', fontsize=11)
     
     # Title
     if title is None:
@@ -144,14 +148,14 @@ def plot_woe_bars(
     
     ax.set_title(title, fontsize=14, fontweight='bold')
     
-    # Grid
-    ax.grid(True, alpha=0.3, axis='y', linestyle='--')
+    # Remove grid
+    ax.grid(False)
     
     # Add legend if using colored bars
     if positive_color and negative_color:
         pos_patch = mpatches.Patch(color=positive_color, label='Positive WoE (lower risk)')
         neg_patch = mpatches.Patch(color=negative_color, label='Negative WoE (higher risk)')
-        ax.legend(handles=[pos_patch, neg_patch], loc='best', frameon=True)
+        ax.legend(handles=[pos_patch, neg_patch], loc='best', frameon=True, fancybox=False, shadow=False)
     
     return ax
 
@@ -162,8 +166,8 @@ def plot_event_rate(
     ax: Optional[Axes] = None,
     figsize: Tuple[float, float] = (10, 6),
     title: Optional[str] = None,
-    bar_color: str = "lightblue",
-    line_color: str = "red",
+    bar_color: str = "#64B5F6",  # Light blue
+    line_color: str = "#E53935",  # Vivid red
     show_counts: bool = True,
     show_rate_values: bool = True,
     rotation: int = 45,
@@ -198,6 +202,11 @@ def plot_event_rate(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     
+    # Remove background and spines
+    ax.set_facecolor('white')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    
     # Validate input
     required_cols = {'bucket', 'mean', 'count'}
     if not required_cols.issubset(summary_df.columns):
@@ -212,6 +221,7 @@ def plot_event_rate(
     
     # Create twin axis for different scales
     ax2 = ax.twinx()
+    ax2.spines['top'].set_visible(False)
     
     # Plot counts as bars (if requested)
     if show_counts:
@@ -220,9 +230,9 @@ def plot_event_rate(
             counts,
             width=0.8,
             color=bar_color,
-            edgecolor='black',
-            linewidth=1,
-            alpha=0.6,
+            edgecolor='white',
+            linewidth=1.5,
+            alpha=0.7,
             label='Sample count'
         )
         
@@ -268,20 +278,19 @@ def plot_event_rate(
                 ha='center',
                 va='bottom',
                 fontsize=9,
-                fontweight='bold',
                 color=line_color
             )
     
     # Styling
     ax.set_xticks(positions)
     ax.set_xticklabels(buckets, rotation=rotation, ha='right' if rotation > 0 else 'center')
-    ax.set_xlabel('Bins', fontsize=12)
+    ax.set_xlabel('Bins', fontsize=11)
     
     if show_counts:
-        ax.set_ylabel('Sample Count', fontsize=12, color='black')
+        ax.set_ylabel('Sample Count', fontsize=11, color='black')
         ax.tick_params(axis='y', labelcolor='black')
     
-    ax2.set_ylabel(rate_label, fontsize=12, color=line_color)
+    ax2.set_ylabel(rate_label, fontsize=11, color=line_color)
     ax2.tick_params(axis='y', labelcolor=line_color)
     
     # Format y-axis
@@ -293,15 +302,16 @@ def plot_event_rate(
         title = 'Event Rate and Sample Distribution by Bin'
     ax.set_title(title, fontsize=14, fontweight='bold')
     
-    # Grid
-    ax.grid(True, alpha=0.3, axis='y', linestyle='--')
+    # Remove grid
+    ax.grid(False)
+    ax2.grid(False)
     
     # Legend
     if show_counts:
         # Combine legends from both axes
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
-        ax.legend(lines1 + lines2, labels1 + labels2, loc='best', frameon=True)
+        ax.legend(lines1 + lines2, labels1 + labels2, loc='best', frameon=True, fancybox=False, shadow=False)
     
     return ax
 
@@ -354,6 +364,10 @@ def plot_bin_statistics(
         fig, axes = plt.subplots(2, 2, figsize=figsize)
         axes = axes.flatten()
     
+    # Set white background for all subplots
+    for ax in axes:
+        ax.set_facecolor('white')
+    
     # Plot 1: WoE bars (binary only) or Event rate
     if is_binary and 'woe' in summary.columns:
         plot_woe_bars(summary, ax=axes[0], title='Weight of Evidence Pattern')
@@ -395,8 +409,8 @@ def plot_bin_statistics(
         target_type = "Binary" if is_binary else "Continuous"
         title = f'Monotonic Optimal Binning Results: {binner.x} → {binner.y} ({target_type} Target)'
     
-    fig.suptitle(title, fontsize=16, fontweight='bold')
-    fig.tight_layout()
+    fig.suptitle(title, fontsize=16, fontweight='bold', y=0.98)
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
     
     return fig
 
@@ -407,7 +421,7 @@ def plot_sample_distribution(
     ax: Optional[Axes] = None,
     figsize: Tuple[float, float] = (10, 6),
     title: Optional[str] = None,
-    color: str = "skyblue",
+    color: str = "#42A5F5",  # Vivid light blue
     show_percentages: bool = True,
     show_cumulative: bool = True,
     rotation: int = 45,
@@ -433,6 +447,11 @@ def plot_sample_distribution(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     
+    # Remove background and spines
+    ax.set_facecolor('white')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    
     # Prepare data
     buckets = summary_df['bucket'].values
     counts = summary_df['count'].values
@@ -444,8 +463,8 @@ def plot_sample_distribution(
         positions,
         percentages,
         color=color,
-        edgecolor='black',
-        linewidth=1,
+        edgecolor='white',
+        linewidth=1.5,
         alpha=0.8
     )
     
@@ -464,35 +483,41 @@ def plot_sample_distribution(
     # Add cumulative line
     if show_cumulative:
         ax2 = ax.twinx()
+        ax2.spines['top'].set_visible(False)
         cumulative = np.cumsum(percentages)
         ax2.plot(
             positions,
             cumulative,
-            'ro-',
-            linewidth=2,
+            'o-',
+            color='#E53935',  # Vivid red
+            linewidth=2.5,
             markersize=6,
+            markeredgecolor='white',
+            markeredgewidth=1.5,
             label='Cumulative %'
         )
-        ax2.set_ylabel('Cumulative Percentage', fontsize=12, color='red')
-        ax2.tick_params(axis='y', labelcolor='red')
+        ax2.set_ylabel('Cumulative Percentage', fontsize=11, color='#E53935')
+        ax2.tick_params(axis='y', labelcolor='#E53935')
         ax2.set_ylim(0, 105)
         
         # Add 50% reference line
-        ax2.axhline(y=50, color='red', linestyle='--', alpha=0.5)
+        ax2.axhline(y=50, color='#E53935', linestyle='--', alpha=0.3)
     
     # Styling
     ax.set_xticks(positions)
     ax.set_xticklabels(buckets, rotation=rotation, ha='right' if rotation > 0 else 'center')
-    ax.set_xlabel('Bins', fontsize=12)
-    ax.set_ylabel('Percentage of Samples', fontsize=12)
+    ax.set_xlabel('Bins', fontsize=11)
+    ax.set_ylabel('Percentage of Samples', fontsize=11)
     ax.set_ylim(0, max(percentages) * 1.15)
     
     if title is None:
         title = 'Sample Distribution Across Bins'
     ax.set_title(title, fontsize=14, fontweight='bold')
     
-    # Grid
-    ax.grid(True, alpha=0.3, axis='y', linestyle='--')
+    # Remove grid
+    ax.grid(False)
+    if show_cumulative:
+        ax2.grid(False)
     
     return ax
 
@@ -530,6 +555,11 @@ def plot_bin_boundaries(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     
+    # Remove background and spines
+    ax.set_facecolor('white')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    
     # Get clean data
     clean_data = binner._parts.clean if hasattr(binner, '_parts') else binner.df
     x_data = clean_data[binner.x].dropna()
@@ -552,11 +582,11 @@ def plot_bin_boundaries(
             bins=50,
             density=True,
             alpha=alpha,
-            color='lightblue',
-            edgecolor='black',
+            color='#64B5F6',  # Light blue
+            edgecolor='white',
             linewidth=0.5
         )
-        ax.set_ylabel('Density', fontsize=12)
+        ax.set_ylabel('Density', fontsize=11)
     else:
         # Scatter plot
         ax.scatter(
@@ -564,9 +594,9 @@ def plot_bin_boundaries(
             y_data,
             alpha=0.5,
             s=10,
-            c='blue'
+            c='#1976D2'  # Blue
         )
-        ax.set_ylabel(binner.y, fontsize=12)
+        ax.set_ylabel(binner.y, fontsize=11)
     
     # Plot bin boundaries
     if show_boundaries:
@@ -584,7 +614,7 @@ def plot_bin_boundaries(
         for boundary in boundaries:
             ax.axvline(
                 x=boundary,
-                color='red',
+                color='#E53935',  # Red
                 linestyle='--',
                 linewidth=2,
                 alpha=0.8,
@@ -600,12 +630,13 @@ def plot_bin_boundaries(
                 va='top',
                 ha='right',
                 fontsize=8,
-                color='red'
+                color='#E53935'
             )
     
     # Plot bin means if requested
     if show_means and not show_density:
         ax2 = ax.twinx()
+        ax2.spines['top'].set_visible(False)
         
         # Calculate mean x position for each bin
         x_positions = []
@@ -628,27 +659,31 @@ def plot_bin_boundaries(
         ax2.plot(
             x_positions,
             y_means,
-            'ro-',
+            'o-',
+            color='#E53935',  # Red
             linewidth=2,
             markersize=8,
+            markeredgecolor='white',
+            markeredgewidth=1.5,
             label='Bin means'
         )
-        ax2.set_ylabel('Bin Mean', fontsize=12, color='red')
-        ax2.tick_params(axis='y', labelcolor='red')
+        ax2.set_ylabel('Bin Mean', fontsize=11, color='#E53935')
+        ax2.tick_params(axis='y', labelcolor='#E53935')
+        ax2.grid(False)
     
     # Styling
-    ax.set_xlabel(binner.x, fontsize=12)
+    ax.set_xlabel(binner.x, fontsize=11)
     
     if title is None:
         title = f'Bin Boundaries on {binner.x} Distribution'
     ax.set_title(title, fontsize=14, fontweight='bold')
     
-    # Grid
-    ax.grid(True, alpha=0.3, linestyle='--')
+    # Remove grid
+    ax.grid(False)
     
     # Legend
     if show_boundaries:
-        ax.legend(loc='best', frameon=True)
+        ax.legend(loc='best', frameon=True, fancybox=False, shadow=False)
     
     return ax
 
@@ -702,6 +737,12 @@ def plot_binning_stability(
     # Create comparison plots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
     
+    # Set white background
+    for ax in [ax1, ax2]:
+        ax.set_facecolor('white')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+    
     # Plot 1: Sample distribution comparison
     train_summary = binner.summary_()
     numeric_mask = ~train_summary['bucket'].str.contains('Missing|Excluded')
@@ -714,7 +755,10 @@ def plot_binning_stability(
         train_summary.loc[numeric_mask, 'count_pct'],
         width,
         label='Train',
-        alpha=0.8
+        alpha=0.8,
+        color='#1976D2',  # Blue
+        edgecolor='white',
+        linewidth=1.5
     )
     
     test_pct = test_stats_df['count'] / test_stats_df['count'].sum() * 100
@@ -723,42 +767,51 @@ def plot_binning_stability(
         test_pct,
         width,
         label='Test',
-        alpha=0.8
+        alpha=0.8,
+        color='#388E3C',  # Green
+        edgecolor='white',
+        linewidth=1.5
     )
     
-    ax1.set_xlabel('Bins')
-    ax1.set_ylabel('Percentage of Samples')
-    ax1.set_title('Sample Distribution: Train vs Test')
+    ax1.set_xlabel('Bins', fontsize=11)
+    ax1.set_ylabel('Percentage of Samples', fontsize=11)
+    ax1.set_title('Sample Distribution: Train vs Test', fontsize=13)
     ax1.set_xticks(x_pos)
     ax1.set_xticklabels(test_stats_df['bucket'], rotation=45, ha='right')
-    ax1.legend()
-    ax1.grid(True, alpha=0.3, axis='y')
+    ax1.legend(frameon=True, fancybox=False, shadow=False)
+    ax1.grid(False)
     
     # Plot 2: Event rate comparison
     ax2.plot(
         x_pos,
         train_summary.loc[numeric_mask, 'mean'] * 100,
         'o-',
-        linewidth=2,
+        linewidth=2.5,
         markersize=8,
+        color='#1976D2',  # Blue
+        markeredgecolor='white',
+        markeredgewidth=1.5,
         label='Train'
     )
     ax2.plot(
         x_pos,
         test_stats_df['mean'] * 100,
         's-',
-        linewidth=2,
+        linewidth=2.5,
         markersize=8,
+        color='#388E3C',  # Green
+        markeredgecolor='white',
+        markeredgewidth=1.5,
         label='Test'
     )
     
-    ax2.set_xlabel('Bins')
-    ax2.set_ylabel('Event Rate (%)')
-    ax2.set_title('Event Rate: Train vs Test')
+    ax2.set_xlabel('Bins', fontsize=11)
+    ax2.set_ylabel('Event Rate (%)', fontsize=11)
+    ax2.set_title('Event Rate: Train vs Test', fontsize=13)
     ax2.set_xticks(x_pos)
     ax2.set_xticklabels(test_stats_df['bucket'], rotation=45, ha='right')
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
+    ax2.legend(frameon=True, fancybox=False, shadow=False)
+    ax2.grid(False)
     
     # Overall title
     if title is None:
