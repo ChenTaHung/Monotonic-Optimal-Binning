@@ -417,38 +417,38 @@ def plot_pava_process(
     ax.plot(cum_count, cum_mean, 'o-', color=initial_color, alpha=0.3, 
             markersize=4, linewidth=1, label='Initial cumulative means')
     
-    # Map blocks to groups based on x values
-    block_group_mapping = []
-    for block in blocks:
-        # Find which groups belong to this block
-        group_indices = []
-        for i, x in enumerate(x_values):
-            if x >= block['left'] and x < block['right']:
-                group_indices.append(i)
-        
-        if group_indices:
-            block_group_mapping.append({
-                'block': block,
-                'group_indices': group_indices,
-                'start_idx': min(group_indices),
-                'end_idx': max(group_indices) + 1
-            })
+    # Process blocks to show merging
+    # First, let's properly map groups to blocks using x values
+    group_to_block = np.zeros(len(x_values), dtype=int) - 1  # -1 means unassigned
     
-    # Visualize the merging process for each block
-    for block_idx, mapping in enumerate(block_group_mapping):
-        block = mapping['block']
-        indices = mapping['group_indices']
+    for block_idx, block in enumerate(blocks):
+        # Find which groups (by x value) belong to this block
+        # Handle infinity values properly
+        left_bound = block['left'] if not np.isneginf(block['left']) else -np.inf
+        right_bound = block['right'] if not np.isposinf(block['right']) else np.inf
         
-        if len(indices) > 0:
+        # Assign groups to blocks based on x values
+        for i, x in enumerate(x_values):
+            if left_bound <= x < right_bound:
+                group_to_block[i] = block_idx
+    
+    # Now visualize the merging process for each block
+    plotted_anchors = 0  # Count anchors to match expected bins
+    
+    for block_idx in range(len(blocks)):
+        # Get indices of groups in this block
+        group_indices = np.where(group_to_block == block_idx)[0]
+        
+        if len(group_indices) > 0:
             # Get cumulative values for groups in this block
-            block_cum_counts = cum_count.iloc[indices]
-            block_cum_means = cum_mean.iloc[indices]
+            block_cum_counts = cum_count.iloc[group_indices]
+            block_cum_means = cum_mean.iloc[group_indices]
             
             # Show merging process (blue dots for intermediate steps)
-            if len(indices) > 1:
+            if len(group_indices) > 1:
                 # Plot intermediate merging steps (all but the last)
-                for i in range(len(indices) - 1):
-                    idx = indices[i]
+                for i in range(len(group_indices) - 1):
+                    idx = group_indices[i]
                     ax.scatter(cum_count.iloc[idx], cum_mean.iloc[idx],
                              c=fallback_color, s=point_size, alpha=0.7,
                              edgecolors='white', linewidth=1, zorder=5)
@@ -458,17 +458,20 @@ def plot_pava_process(
                        color=fallback_color, alpha=line_alpha, linewidth=2)
             
             # Plot anchor point (red) where this block is finalized
-            final_idx = indices[-1]
+            # Use the last group in this block as the anchor
+            final_idx = group_indices[-1]
             final_count = cum_count.iloc[final_idx]
             final_mean = cum_mean.iloc[final_idx]
             
             ax.scatter(final_count, final_mean, c=anchor_color, s=anchor_size,
                      marker='s', alpha=0.9, edgecolors='white', linewidth=2,
-                     zorder=10, label='Completed bin anchors' if block_idx == 0 else None)
+                     zorder=10, label='Completed bin anchors' if plotted_anchors == 0 else None)
+            
+            plotted_anchors += 1
             
             # Add annotation for anchor points
-            if show_annotations and block_idx < min(5, len(block_group_mapping)):
-                ax.annotate(f'Bin {block_idx+1}', 
+            if show_annotations and plotted_anchors <= min(5, len(blocks)):
+                ax.annotate(f'Bin {plotted_anchors}', 
                           xy=(final_count, final_mean),
                           xytext=(10, 10), textcoords='offset points',
                           fontsize=9, color=anchor_color,
@@ -476,18 +479,20 @@ def plot_pava_process(
                                    edgecolor=anchor_color, alpha=0.8))
     
     # Add visual connections between completed bins
-    if len(block_group_mapping) > 1:
-        anchor_counts = []
-        anchor_means = []
-        for mapping in block_group_mapping:
-            if mapping['group_indices']:
-                final_idx = mapping['group_indices'][-1]
-                anchor_counts.append(cum_count.iloc[final_idx])
-                anchor_means.append(cum_mean.iloc[final_idx])
+    if plotted_anchors > 1:
+        # Get anchor positions
+        anchor_positions = []
+        for block_idx in range(len(blocks)):
+            group_indices = np.where(group_to_block == block_idx)[0]
+            if len(group_indices) > 0:
+                final_idx = group_indices[-1]
+                anchor_positions.append((cum_count.iloc[final_idx], cum_mean.iloc[final_idx]))
         
-        # Draw faint lines connecting anchors to show progression
-        ax.plot(anchor_counts, anchor_means, '--', color=anchor_color, 
-               alpha=0.3, linewidth=1.5, zorder=1)
+        if len(anchor_positions) > 1:
+            anchor_counts, anchor_means = zip(*anchor_positions)
+            # Draw faint lines connecting anchors to show progression
+            ax.plot(anchor_counts, anchor_means, '--', color=anchor_color, 
+                   alpha=0.3, linewidth=1.5, zorder=1)
     
     # Add arrows to show direction of process
     if len(blocks) > 1 and len(cum_count) > 0:
@@ -523,6 +528,9 @@ def plot_pava_process(
         ]
         ax.legend(handles=legend_elements, loc='best', frameon=True, 
                  fancybox=False, shadow=False)
+    
+    # Debug info
+    logger.debug(f"PAVA process plot: {len(blocks)} blocks → {plotted_anchors} anchors plotted")
     
     return ax
 
