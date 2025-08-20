@@ -6,9 +6,9 @@ for understanding how monotonicity is achieved and assessing bin quality.
 
 Main Components:
     CSD/GCM Plots (from csd_gcm):
-        plot_csd: Cumulative Sum Diagram showing PAVA's pooling process.
         plot_gcm: Greatest Convex Minorant showing monotonic fit.
         plot_pava_comparison: Side-by-side CSD and GCM plots.
+        plot_pava_process: PAVA merging process visualization.
         plot_pava_animation: Animated visualization of PAVA iterations.
     
     MOB Result Plots (from mob_plot):
@@ -42,7 +42,7 @@ Note:
 
 # Import all plotting functions
 from .csd_gcm import (
-    plot_cumulative_mean,
+    # plot_cumulative_mean,  # Commented out for now, keeping for future reference
     plot_gcm,
     plot_pava_comparison,
     plot_pava_process,
@@ -60,7 +60,7 @@ from .mob_plot import (
 
 __all__ = [
     # PAVA visualization
-    "plot_cumulative_mean",
+    # "plot_cumulative_mean",  # Commented out for now
     "plot_gcm", 
     "plot_pava_comparison",
     "plot_pava_process",
