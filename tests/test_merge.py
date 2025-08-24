@@ -13,7 +13,7 @@ from typing import List, Dict
 from MOBPY.core.merge import (
     Block, merge_adjacent, as_blocks, 
     MergeStrategy, MergeScorer, 
-    blocks_from_dicts, _compute_pvalue
+    blocks_from_dicts
 )
 from MOBPY.core.constraints import BinningConstraints
 from MOBPY.exceptions import FittingError
@@ -91,7 +91,8 @@ class TestBlock:
             ymin=3.0, ymax=4.0
         )
         
-        merged = block1.merge(block2)
+        # Use merge_with instead of merge
+        merged = block1.merge_with(block2)
         
         assert merged.left == 0.0
         assert merged.right == 2.0
@@ -115,12 +116,14 @@ class TestBlock:
             ymin=2.0, ymax=4.0
         )
         
-        merged = block1.merge(block2)
+        merged = block1.merge_with(block2)
         
         # Should track merge in history
         assert len(merged.merge_history) > 0
-        assert (0.0, 2.0) in merged.merge_history or \
-               (block1.left, block2.right) in merged.merge_history
+        # Check that history contains blocks' boundaries
+        history_boundaries = [(h[0], h[1]) for h in merged.merge_history]
+        assert (0.0, 1.0) in history_boundaries
+        assert (1.0, 2.0) in history_boundaries
     
     def test_block_empty_merge(self):
         """Test merging with empty block."""
@@ -136,12 +139,31 @@ class TestBlock:
             ymin=float('inf'), ymax=float('-inf')
         )
         
-        merged = normal_block.merge(empty_block)
+        merged = normal_block.merge_with(empty_block)
         
         # Should preserve normal block's statistics
         assert merged.n == 5
         assert merged.sum == 10.0
         assert merged.sum2 == 25.0
+    
+    def test_block_as_dict(self):
+        """Test block export as dictionary."""
+        block = Block(
+            left=0.0, right=1.0,
+            n=10, sum=50.0, sum2=300.0,
+            ymin=3.0, ymax=7.0
+        )
+        
+        block_dict = block.as_dict()
+        
+        assert block_dict['left'] == 0.0
+        assert block_dict['right'] == 1.0
+        assert block_dict['n'] == 10
+        assert block_dict['sum'] == 50.0
+        assert block_dict['sum2'] == 300.0
+        assert block_dict['mean'] == 5.0  # 50/10
+        assert 'var' in block_dict
+        assert 'std' in block_dict
 
 
 class TestMergeAdjacent:
@@ -183,64 +205,6 @@ class TestMergeAdjacent:
     
     def test_merge_respects_max_bins(self):
         """Test merging respects maximum bins constraint."""
-        blocks = self._create_test_blocks()
-        
-        constraints = BinningConstraints(
-            max_bins=2,
-            min_bins=1
-        )
-        constraints.resolve(total_n=30, total_pos=15)
-        
-        merged = merge_adjacent(blocks, constraints, is_binary_y=False)
-        
-        # Should have at most 2 bins
-        assert len(merged) <= 2
-    
-    def test_merge_respects_min_samples(self):
-        """Test merging respects minimum samples constraint."""
-        # Create blocks with varying sizes
-        blocks = [
-            {'left': 0.0, 'right': 1.0, 'n': 5, 'sum': 5.0, 
-             'sum2': 6.0, 'ymin': 0.8, 'ymax': 1.2},
-            {'left': 1.0, 'right': 2.0, 'n': 3, 'sum': 6.0,  # Small block
-             'sum2': 13.0, 'ymin': 1.8, 'ymax': 2.2},
-            {'left': 2.0, 'right': 3.0, 'n': 20, 'sum': 60.0, 
-             'sum2': 182.0, 'ymin': 2.8, 'ymax': 3.2},
-        ]
-        
-        constraints = BinningConstraints(
-            max_bins=10,
-            min_bins=1,
-            min_samples=10  # Absolute minimum
-        )
-        constraints.resolve(total_n=28, total_pos=14)
-        
-        merged = merge_adjacent(blocks, constraints, is_binary_y=False)
-        
-        # All blocks should have at least 10 samples
-        for block in merged:
-            assert block.n >= 10
-    
-    def test_merge_strategy_highest_pvalue(self):
-        """Test highest p-value merge strategy."""
-        blocks = self._create_test_blocks()
-        
-        constraints = BinningConstraints(
-            max_bins=2,
-            min_bins=1
-        )
-        constraints.resolve(total_n=30, total_pos=15)
-        
-        merged = merge_adjacent(
-            blocks, constraints, 
-            is_binary_y=False,
-            strategy=MergeStrategy.HIGHEST_PVALUE
-        )
-        
-        assert len(merged) <= 2
-    
-    def test_merge_strategy_smallest_loss(self):
-        """Test smallest loss merge strategy."""
         blocks = self._create_test_blocks()
         
         constraints = BinningConstraints(
@@ -332,6 +296,67 @@ class TestMergeAdjacent:
         for block in merged:
             n_positives = block.sum  # For binary, sum = count of 1s
             assert n_positives >= 3
+    
+    def test_merge_respects_min_samples(self):
+        """Test merging respects minimum samples constraint."""
+        # Create blocks with varying sizes
+        blocks = [
+            {'left': 0.0, 'right': 1.0, 'n': 5, 'sum': 5.0, 
+             'sum2': 6.0, 'ymin': 0.8, 'ymax': 1.2},
+            {'left': 1.0, 'right': 2.0, 'n': 3, 'sum': 6.0,  # Small block
+             'sum2': 13.0, 'ymin': 1.8, 'ymax': 2.2},
+            {'left': 2.0, 'right': 3.0, 'n': 20, 'sum': 60.0, 
+             'sum2': 182.0, 'ymin': 2.8, 'ymax': 3.2},
+        ]
+        
+        constraints = BinningConstraints(
+            max_bins=10,
+            min_bins=1,
+            min_samples=10  # Absolute minimum
+        )
+        constraints.resolve(total_n=28, total_pos=14)
+        
+        merged = merge_adjacent(blocks, constraints, is_binary_y=False)
+        
+        # All blocks should have at least 10 samples
+        for block in merged:
+            assert block.n >= 10
+    
+    def test_merge_strategy_highest_pvalue(self):
+        """Test highest p-value merge strategy."""
+        blocks = self._create_test_blocks()
+        
+        constraints = BinningConstraints(
+            max_bins=2,
+            min_bins=1
+        )
+        constraints.resolve(total_n=30, total_pos=15)
+        
+        merged = merge_adjacent(
+            blocks, constraints, 
+            is_binary_y=False,
+            strategy=MergeStrategy.HIGHEST_PVALUE
+        )
+        
+        assert len(merged) <= 2
+    
+    def test_merge_strategy_smallest_loss(self):
+        """Test smallest loss merge strategy."""
+        blocks = self._create_test_blocks()
+        
+        constraints = BinningConstraints(
+            max_bins=2,
+            min_bins=1
+        )
+        constraints.resolve(total_n=30, total_pos=15)
+        
+        merged = merge_adjacent(
+            blocks, constraints,
+            is_binary_y=False,
+            strategy=MergeStrategy.SMALLEST_LOSS
+        )
+        
+        assert len(merged) <= 2
     
     def test_merge_single_block(self):
         """Test merging with single input block."""
@@ -437,105 +462,75 @@ class TestMergeHelperFunctions:
         assert blocks[0].mean == 1.0
         assert blocks[1].mean == 2.0
     
-    def test_compute_pvalue_continuous(self):
-        """Test p-value computation for continuous data."""
-        # Create blocks with different means
-        block1 = Block(
-            left=0.0, right=1.0, n=100, sum=100.0,
-            sum2=110.0, ymin=0.8, ymax=1.2
-        )
+    def test_blocks_from_dicts_with_missing_fields(self):
+        """Test blocks_from_dicts handles alternative field names."""
+        # Test with 'min' and 'max' instead of 'ymin' and 'ymax'
+        dicts = [
+            {'left': 0.0, 'right': 1.0, 'n': 5, 'sum': 5.0,
+             'sum2': 6.0, 'min': 0.8, 'max': 1.2}
+        ]
         
-        block2 = Block(
-            left=1.0, right=2.0, n=100, sum=200.0,
-            sum2=410.0, ymin=1.8, ymax=2.2
-        )
+        blocks = blocks_from_dicts(dicts)
         
-        pvalue = _compute_pvalue(block1, block2, is_binary=False)
-        
-        # Should return valid p-value
-        assert 0 <= pvalue <= 1
-        
-        # Different means should give low p-value
-        assert pvalue < 0.05
-    
-    def test_compute_pvalue_binary(self):
-        """Test p-value computation for binary data."""
-        # Binary blocks with different proportions
-        block1 = Block(
-            left=0.0, right=1.0, n=100, sum=20.0,  # 20% rate
-            sum2=20.0, ymin=0.0, ymax=1.0
-        )
-        
-        block2 = Block(
-            left=1.0, right=2.0, n=100, sum=80.0,  # 80% rate
-            sum2=80.0, ymin=0.0, ymax=1.0
-        )
-        
-        pvalue = _compute_pvalue(block1, block2, is_binary=True)
-        
-        # Should return valid p-value
-        assert 0 <= pvalue <= 1
-        
-        # Very different proportions should give very low p-value
-        assert pvalue < 0.001
-    
-    def test_compute_pvalue_edge_cases(self):
-        """Test p-value computation edge cases."""
-        # Identical blocks should give high p-value
-        block1 = Block(
-            left=0.0, right=1.0, n=100, sum=100.0,
-            sum2=102.0, ymin=0.98, ymax=1.02
-        )
-        
-        block2 = Block(
-            left=1.0, right=2.0, n=100, sum=100.0,
-            sum2=102.0, ymin=0.98, ymax=1.02
-        )
-        
-        pvalue = _compute_pvalue(block1, block2, is_binary=False)
-        
-        # Very similar blocks should give high p-value
-        assert pvalue > 0.5
+        assert len(blocks) == 1
+        assert blocks[0].ymin == 0.8
+        assert blocks[0].ymax == 1.2
     
     def test_merge_scorer_initialization(self):
         """Test MergeScorer class initialization."""
-        blocks = [
-            Block(left=0.0, right=1.0, n=10, sum=10.0,
-                  sum2=12.0, ymin=0.8, ymax=1.2),
-            Block(left=1.0, right=2.0, n=10, sum=20.0,
-                  sum2=42.0, ymin=1.8, ymax=2.2)
-        ]
+        constraints = BinningConstraints(
+            max_bins=5,
+            min_bins=2
+        )
+        constraints.resolve(total_n=100, total_pos=50)
         
         scorer = MergeScorer(
-            blocks=blocks,
-            is_binary=False,
+            constraints=constraints,
+            is_binary_y=False,
             strategy=MergeStrategy.HIGHEST_PVALUE
         )
         
-        assert scorer.n_blocks == 2
+        assert scorer.constraints == constraints
+        assert scorer.is_binary_y == False
         assert scorer.strategy == MergeStrategy.HIGHEST_PVALUE
     
-    def test_merge_scorer_compute_scores(self):
-        """Test MergeScorer score computation."""
-        blocks = [
-            Block(left=0.0, right=1.0, n=10, sum=10.0,
-                  sum2=12.0, ymin=0.8, ymax=1.2),
-            Block(left=1.0, right=2.0, n=10, sum=15.0,
-                  sum2=24.0, ymin=1.3, ymax=1.7),
-            Block(left=2.0, right=3.0, n=10, sum=30.0,
-                  sum2=92.0, ymin=2.8, ymax=3.2)
-        ]
+    def test_merge_scorer_score_pair(self):
+        """Test MergeScorer.score_pair method."""
+        constraints = BinningConstraints(
+            max_bins=5,
+            min_bins=2
+        )
+        constraints.resolve(total_n=100, total_pos=50)
         
         scorer = MergeScorer(
-            blocks=blocks,
-            is_binary=False,
+            constraints=constraints,
+            is_binary_y=False,
             strategy=MergeStrategy.HIGHEST_PVALUE
         )
         
-        scores = scorer.compute_scores()
+        # Create two similar blocks (should get high score)
+        block1 = Block(
+            left=0.0, right=1.0, n=50, sum=50.0,
+            sum2=52.0, ymin=0.98, ymax=1.02
+        )
         
-        # Should have n-1 scores for adjacent pairs
-        assert len(scores) == 2
+        block2 = Block(
+            left=1.0, right=2.0, n=50, sum=51.0,
+            sum2=53.0, ymin=0.99, ymax=1.03
+        )
         
-        # Scores should be valid
-        assert all(isinstance(s, (int, float)) for s in scores)
+        score = scorer.score_pair(block1, block2)
+        
+        # Score should be positive
+        assert score > 0
+        
+        # Create two very different blocks (should get lower score)
+        block3 = Block(
+            left=2.0, right=3.0, n=50, sum=150.0,
+            sum2=452.0, ymin=2.8, ymax=3.2
+        )
+        
+        score2 = scorer.score_pair(block1, block3)
+        
+        # Score for different blocks should be lower
+        assert score2 < score

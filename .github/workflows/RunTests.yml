@@ -44,8 +44,40 @@ jobs:
 
       - name: Install test-only tools (if not already in requirements.txt)
         run: |
-          pip install pytest hypothesis
+          pip install pytest
 
-      - name: Run tests
+      - name: Run Config Tests
         run: |
-          pytest -vv -q
+          pytest -vv tests/test_config.py
+
+      - name: Run Constraints Tests
+        run: |
+          pytest -vv tests/test_constraints.py
+
+      - name: Run Exceptions Tests
+        run: |
+          pytest -vv tests/test_exceptions.py
+      
+      - name: Run Logging Utils Tests
+        run: |
+          pytest -vv tests/test_logging_utils.py
+
+      - name: Run Utils Tests
+        run: |
+          pytest -vv tests/test_utils.py
+
+      - name: Run PAVA Tests
+        run: |
+          pytest -vv tests/test_pava.py
+        
+      - name: Run Merge Tests
+        run: |
+          pytest -vv tests/test_merge.py
+
+      - name: Run MOB Tests
+        run: |
+          pytest -vv tests/test_mob.py
+
+      - name: Run Plotting Tests
+        run: |
+          pytest -vv tests/test_plotting.py
