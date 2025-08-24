@@ -44,7 +44,7 @@ jobs:
 
       - name: Install test-only tools (if not already in requirements.txt)
         run: |
-          pip install pytest
+          pip install pytest 
 
       - name: Run Config Tests
         run: |
