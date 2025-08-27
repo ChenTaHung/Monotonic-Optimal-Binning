@@ -1,4 +1,4 @@
-# plot_bin_boundaries Function Documentation
+# `plot_bin_boundaries` Function Documentation
 
 ## Overview
 The `plot_bin_boundaries` function visualizes bin boundaries overlaid on the feature distribution, showing how the binning algorithm partitioned the continuous feature space. It helps understand the relationship between bin cuts and the underlying data density.
