@@ -47,7 +47,7 @@ MonotonicBinner (binning.mob)
     └── Plotting Functions (plot.*)
         ├── plot_bin_statistics
         ├── plot_woe_bars
-        └── ...
+        └── plot_pava_comparison
 ```
 
 ---
@@ -89,7 +89,7 @@ binner.fit()
 
 ### Key Settings
 - `epsilon`: Numerical tolerance (default: 1e-12)
--rese/1000)
+- `max_iterations`: Maximum iterations (default: 1000)
 - `enable_progress_bar`: Show progress (default: False)
 - `n_jobs`: Parallel jobs (default: 1)
 - `validate_inputs`: Input validation (default: True)
@@ -114,6 +114,7 @@ set_config(epsilon=1e-10, n_jobs=-1)
 | `FittingError` | `MOBPYError` | Fitting/algorithm failures |
 | `ConstraintError` | `MOBPYError` | Constraint violations |
 | `NotFittedError` | `MOBPYError` | Accessing unfitted model |
+| `BinningWarning` | `UserWarning` | Non-critical warnings |
 
 ### Usage
 ```python
@@ -135,15 +136,24 @@ if df.empty:
 ### Functions
 | Function | Description |
 |----------|-------------|
-| `get_logger(name)` | Get configured logger instance |
-| `setup_logging(level)` | Configure logging system |
+| `get_logger(name, level=None)` | Get configured logger instance |
+| `set_verbosity(level)` | Set global logging verbosity |
 
 ### Usage
 ```python
-from MOBPY.logging_utils import get_logger
+from MOBPY.logging_utils import get_logger, set_verbosity
 
+# Set logging level
+set_verbosity('DEBUG')  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+# Get module logger
 logger = get_logger(__name__)
 logger.info("Starting binning process")
+
+# Progress tracking
+with BinningProgressLogger("fitting") as progress:
+    progress.update("Running PAVA")
+    progress.update("Merging blocks")
 ```
 
 ---
@@ -163,6 +173,7 @@ logger.info("Starting binning process")
 | `strict` | bool | True | Enforce strict monotonicity |
 | `constraints` | BinningConstraints | None | Binning constraints |
 | `exclude_values` | Iterable | None | Values to exclude |
+| `merge_strategy` | MergeStrategy | HIGHEST_PVALUE | Merge selection strategy |
 
 #### Main Methods
 | Method | Returns | Description |
@@ -171,6 +182,8 @@ logger.info("Starting binning process")
 | `bins_()` | DataFrame | Get bin boundaries and statistics |
 | `summary_()` | DataFrame | Get detailed summary with WoE/IV |
 | `transform(x_values, assign)` | Series | Transform new data to bins |
+| `pava_blocks_()` | List | Get PAVA blocks before merging |
+| `pava_groups_()` | DataFrame | Get grouped statistics from PAVA |
 
 #### Usage
 ```python
@@ -213,6 +226,8 @@ labels = binner.transform(new_df['age'], assign='interval')
 |--------|-------------|
 | `resolve(total_n, total_pos)` | Convert fractional to absolute |
 | `validate()` | Check constraint consistency |
+| `copy()` | Create a copy of constraints |
+| `is_resolved()` | Check if constraints are resolved |
 
 #### Usage
 ```python
@@ -241,11 +256,8 @@ constraints = BinningConstraints(
 |--------|---------|-------------|
 | `fit()` | self | Run PAVA algorithm |
 | `export_blocks(as_dict)` | List | Export monotonic blocks |
-
-#### Internal Class: _Block
-- Maintains sufficient statistics (n, sum, sum2, min, max)
-- Properties: mean, var, std
-- Method: `merge_with(other)` - Pool statistics
+| `validate_monotonicity()` | bool | Check if blocks are monotonic |
+| `get_diagnostics()` | Dict | Get fitting diagnostics |
 
 #### Usage
 ```python
@@ -272,9 +284,10 @@ blocks = pava.export_blocks(as_dict=True)
 | `constraints` | BinningConstraints | Resolved constraints |
 | `is_binary_y` | bool | Whether target is binary |
 | `strategy` | MergeStrategy | Merge selection strategy |
+| `history` | List | Optional merge history tracking |
 
 #### MergeStrategy Options
-- `HIGHEST_PVALUE`: Merge most similar blocks
+- `HIGHEST_PVALUE`: Merge most similar blocks (default)
 - `SMALLEST_LOSS`: Minimize information loss
 - `BALANCED_SIZE`: Balance block sizes
 
@@ -326,7 +339,7 @@ parts = partition_df(df, x='feature', exclude_values=[-999])
 # Check target type
 is_binary = is_binary_series(df['target'])
 
-# Calculate WoE/IV
+# Calculate WoE/IV (corrected function name)
 woe_vals, iv_vals = woe_iv(goods, bads, smoothing=0.5)
 ```
 
@@ -341,7 +354,6 @@ woe_vals, iv_vals = woe_iv(goods, bads, smoothing=0.5)
 | `plot_gcm()` | Visualize Greatest Convex Minorant | groups_df, blocks, ax |
 | `plot_pava_comparison()` | Side-by-side CSD and GCM | binner, figsize |
 | `plot_pava_process()` | Step-by-step PAVA process | groups_df, blocks |
-| `plot_pava_animation()` | Animated PAVA execution | groups_df, blocks, fps |
 
 #### Usage
 ```python
@@ -349,7 +361,6 @@ from MOBPY.plot import plot_gcm, plot_pava_comparison
 
 # After fitting
 fig = plot_pava_comparison(binner)
-ax = plot_gcm(binner._pava.groups_, blocks)
 ```
 
 ### Binning Results (`mob_plot.py`)
@@ -390,9 +401,11 @@ import pandas as pd
 from MOBPY import MonotonicBinner, BinningConstraints
 from MOBPY.plot import plot_bin_statistics
 from MOBPY.config import set_config
+from MOBPY.logging_utils import set_verbosity
 
 # 1. Configure
 set_config(epsilon=1e-10, enable_progress_bar=True)
+set_verbosity('INFO')  # Enable info logging
 
 # 2. Load data
 df = pd.read_csv('data/german_data_credit_cat.csv')
@@ -450,6 +463,7 @@ fig = plot_binning_stability(
 | `test_utils.py` | Utilities | Validation, partitioning, WoE/IV |
 | `test_plotting.py` | Visualizations | Plot creation, no errors |
 | `test_exceptions.py` | Custom exceptions | Error handling, messages |
+| `test_logging_utils.py` | Logging utilities | Logger creation, verbosity settings |
 
 ### Running Tests
 ```bash
@@ -490,67 +504,29 @@ pytest tests/test_property_based.py
    - Vectorized operations where possible
    - Optional progress tracking
 
-5. **Usability**
-   - Sensible defaults for all parameters
-   - Method chaining support
-   - Comprehensive documentation
+5. **Testability**
+   - Property-based testing with Hypothesis
+   - Unit tests for all components
+   - Integration tests for full pipeline
 
 ---
 
-## Common Integration Patterns
+## Dependencies
 
-### Risk Scoring
-```python
-# Train binning model
-binner = MonotonicBinner(train_df, x='income', y='default')
-binner.fit()
+### Core Dependencies
+- numpy: Numerical operations
+- pandas: Data handling
+- scipy: Statistical tests (t-test in merging)
+- matplotlib: Plotting (optional)
 
-# Apply to production
-def score_customer(income):
-    woe = binner.transform(pd.Series([income]), assign='woe')[0]
-    return woe_to_score(woe)
-```
-
-### Feature Engineering
-```python
-# Create binned features
-for feature in ['age', 'income', 'tenure']:
-    binner = MonotonicBinner(df, x=feature, y='target')
-    binner.fit()
-    df[f'{feature}_bin'] = binner.transform(df[feature])
-    df[f'{feature}_woe'] = binner.transform(df[feature], assign='woe')
-```
-
-### Model Monitoring
-```python
-# Monthly stability check
-def monthly_stability_check(current_month_df):
-    current_summary = apply_binning(current_month_df)
-    psi = calculate_psi(baseline_summary, current_summary)
-    
-    if psi > 0.25:
-        alert("Significant distribution shift detected")
-    
-    return plot_binning_stability(baseline_summary, current_summary)
-```
+### Development Dependencies
+- pytest: Testing framework
+- hypothesis: Property-based testing
 
 ---
 
-## Package Metadata
+## License & Contributing
 
-- **Name**: MOBPY
-- **Version**: 2.0.0
 - **License**: MIT
-- **Python**: 3.9-3.12
-- **Dependencies**: numpy, pandas, matplotlib, scipy
-- **Repository**: https://github.com/ChenTaHung/Monotonic-Optimal-Binning
-
----
-
-## Support and Resources
-
-- **Documentation**: This orchestration guide and module-specific docs
-- **Examples**: `examples/` directory with Jupyter notebooks
-- **Tests**: Comprehensive test suite in `tests/`
-- **Issues**: GitHub repository issue tracker
-- **Contributing**: See CONTRIBUTING.md
+- **Issues**: GitHub issue tracker
+- **PRs**: Welcome with tests

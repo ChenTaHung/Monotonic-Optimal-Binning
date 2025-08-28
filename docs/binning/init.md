@@ -1,8 +1,3 @@
-Great! I'll update the dependencies to include scipy. Now let's create the documentation for the `binning/__init__.py` module:
-
-## **Binning Module Documentation** (`binning/__init__.py`)
-
-```markdown
 # Binning Module Documentation
 
 ## Overview
@@ -104,6 +99,8 @@ from MOBPY.binning import *
 2. **Clean API**: Provides a simple, intuitive interface for end users
 3. **Separation of Concerns**: Delegates algorithmic details to core modules
 4. **Extensibility**: Designed to accommodate future binning strategies
+5. **Robustness**: Comprehensive error handling and validation
+6. **Performance**: Optimized for both small and large datasets
 
 ## Error Handling
 
@@ -118,11 +115,12 @@ The module handles various error conditions:
 - Optimized for datasets with 10² to 10⁶ samples
 - Memory efficient through grouped operations
 - Scales linearly with number of unique x values
+- Uses vectorized operations where possible
 
 ## Dependencies
 - numpy
 - pandas
-- scipy
+- scipy (for statistical tests in merging)
 - MOBPY.core modules
 - MOBPY.plot modules (optional, for visualization)
 
@@ -130,4 +128,3 @@ The module handles various error conditions:
 - [`MonotonicBinner`](./mob.md) - Detailed documentation of the main class
 - [`BinningConstraints`](../core/constraints.md) - Constraint configuration
 - [`PAVA`](../core/pava.md) - Core algorithm documentation
-```

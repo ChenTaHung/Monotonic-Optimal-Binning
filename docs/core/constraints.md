@@ -1,7 +1,7 @@
-# BinningConstraints Class Documentation
+# `BinningConstraints` Class Documentation
 
 ## Overview
-The `BinningConstraints` class encapsulates all user-defined constraints for the binning process. It provides validation and automatic resolution of constraints from fractional to absolute values based on the actual data size at fit time.
+The BinningConstraints class defines and manages constraints for the binning process. It supports both fractional (percentage-based) and absolute constraints, automatically resolving them based on the actual data size during fitting.
 
 ## Module Location
 `src/MOBPY/core/constraints.py`
@@ -13,77 +13,72 @@ The `BinningConstraints` class encapsulates all user-defined constraints for the
 class BinningConstraints:
     max_bins: int = 6
     min_bins: int = 4
-    max_samples: Optional[float] = None
-    min_samples: Optional[float] = None
-    min_positives: Optional[float] = None
+    max_samples: Optional[Union[float, int]] = None
+    min_samples: Optional[Union[float, int]] = None
+    min_positives: Optional[Union[float, int]] = None
     initial_pvalue: float = 0.4
     maximize_bins: bool = True
 ```
 
-## Parameters
+## Constructor Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| **max_bins** | `int` | `6` | Maximum number of bins allowed. Must be ≥ 1 |
-| **min_bins** | `int` | `4` | Minimum number of bins to maintain. Must be ≥ 1 and ≤ max_bins |
-| **max_samples** | `Optional[float]` | `None` | Maximum samples per bin. If in (0,1], treated as fraction. If > 1, treated as absolute count. None means no upper limit |
-| **min_samples** | `Optional[float]` | `None` | Minimum samples per bin. If in (0,1], treated as fraction. If > 1, treated as absolute count. None defaults to 0 |
-| **min_positives** | `Optional[float]` | `None` | Minimum positive samples per bin (binary targets only). If in (0,1], treated as fraction of total positives. If > 1, treated as absolute count. None defaults to 0 |
-| **initial_pvalue** | `float` | `0.4` | Initial p-value threshold for merge decisions. Higher values make merging more aggressive. Must be in (0, 1] |
-| **maximize_bins** | `bool` | `True` | If True, prioritize staying at/below max_bins. If False, prioritize staying at/above min_bins |
+| **max_bins** | `int` | `6` | Maximum number of bins to create |
+| **min_bins** | `int` | `4` | Minimum number of bins to maintain |
+| **max_samples** | `Optional[Union[float, int]]` | `None` | Maximum samples per bin. If float in (0,1], treated as fraction |
+| **min_samples** | `Optional[Union[float, int]]` | `None` | Minimum samples per bin. If float in (0,1], treated as fraction |
+| **min_positives** | `Optional[Union[float, int]]` | `None` | Minimum positive samples per bin (binary targets only) |
+| **initial_pvalue** | `float` | `0.4` | Initial p-value threshold for merging (annealed during search) |
+| **maximize_bins** | `bool` | `True` | If True, create as many bins as possible within constraints |
 
 ## Resolved Attributes
 
-After calling `resolve()`, these attributes contain absolute values:
+After calling `resolve()`, these attributes become available:
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| **abs_max_samples** | `Optional[int]` | Resolved absolute maximum samples per bin |
-| **abs_min_samples** | `int` | Resolved absolute minimum samples per bin |
-| **abs_min_positives** | `int` | Resolved absolute minimum positives per bin |
-| **_resolved** | `bool` | Internal flag tracking resolution state |
+| **abs_max_samples** | `Optional[int]` | Absolute maximum samples per bin |
+| **abs_min_samples** | `int` | Absolute minimum samples per bin |
+| **abs_min_positives** | `int` | Absolute minimum positives per bin |
 
-## Methods
-
-### `__post_init__() -> None`
-Validates constraints immediately after initialization.
-
-**Raises:**
-- `ConstraintError`: If initial constraints are invalid (e.g., negative values, invalid p-value range)
+## Main Methods
 
 ### `resolve(total_n: int, total_pos: Optional[int] = None) -> None`
-Resolves fractional constraints to absolute values based on data size.
+Converts fractional constraints to absolute values based on data size.
 
 **Parameters:**
-- **total_n** (`int`): Total number of clean samples
+- **total_n** (`int`): Total number of samples in clean data
 - **total_pos** (`Optional[int]`): Total number of positive samples (for binary targets)
 
-**Resolution Rules:**
-- Values in (0, 1] are treated as fractions and converted using floor: `int(value * total)`
-- Values > 1 are treated as absolute counts and kept unchanged
-- None values for minimums become 0
-- None values for maximums remain None (no limit)
-
-**Validation After Resolution:**
-- Ensures `min_samples ≤ max_samples` (if both specified)
-- Ensures `min_bins ≤ max_bins`
-- Ensures all resolved values are non-negative
+**Behavior:**
+- Fractional values (0 < value ≤ 1) are converted to absolute counts
+- Absolute values (> 1) remain unchanged
+- Sets resolved attributes (abs_min_samples, abs_max_samples, abs_min_positives)
+- Validates that min ≤ max for all constraints
 
 **Raises:**
-- `ConstraintError`: If resolved constraints are contradictory
+- `ConstraintError`: If constraints are invalid or contradictory
 
 **Example:**
 ```python
 constraints = BinningConstraints(
-    min_samples=0.1,    # 10% of data
-    min_positives=0.05  # 5% of positives
+    min_samples=0.05,    # 5% of data
+    max_samples=0.30,    # 30% of data
+    min_positives=0.01   # 1% of positives
 )
+
+# Resolve for actual data size
 constraints.resolve(total_n=1000, total_pos=200)
-# Now: abs_min_samples = 100, abs_min_positives = 10
+
+# Now we have absolute values
+print(f"Min samples: {constraints.abs_min_samples}")  # 50
+print(f"Max samples: {constraints.abs_max_samples}")  # 300
+print(f"Min positives: {constraints.abs_min_positives}")  # 2
 ```
 
 ### `validate() -> None`
-Internal validation method called during initialization and after resolution.
+Validates that all constraints are consistent and feasible.
 
 **Checks:**
 - All constraint values are non-negative
@@ -91,12 +86,71 @@ Internal validation method called during initialization and after resolution.
 - `min_bins ≤ max_bins`
 - `min_samples ≤ max_samples` (after resolution)
 
+**Raises:**
+- `ConstraintError`: If validation fails
+
+**Example:**
+```python
+constraints = BinningConstraints(
+    min_bins=2,
+    max_bins=6,
+    min_samples=0.05,
+    initial_pvalue=0.4
+)
+
+# Validate on creation
+constraints.validate()  # Passes
+
+# Invalid constraints
+bad_constraints = BinningConstraints(
+    min_bins=10,
+    max_bins=5  # min > max!
+)
+bad_constraints.validate()  # Raises ConstraintError
+```
+
+### `copy() -> BinningConstraints`
+Creates a deep copy of the constraints.
+
+**Returns:**
+- `BinningConstraints`: New instance with same values
+
+**Example:**
+```python
+original = BinningConstraints(max_bins=5, min_samples=0.1)
+copy = original.copy()
+
+# Modify copy without affecting original
+copy.max_bins = 10
+assert original.max_bins == 5
+```
+
 ### `is_resolved() -> bool`
 Property indicating whether constraints have been resolved.
 
-**Returns:** `True` if `resolve()` has been called, `False` otherwise
+**Returns:**
+- `bool`: True if `resolve()` has been called, False otherwise
 
-## Usage Examples
+**Example:**
+```python
+constraints = BinningConstraints()
+assert not constraints.is_resolved
+
+constraints.resolve(total_n=1000)
+assert constraints.is_resolved
+```
+
+### `__str__() -> str`
+Returns a human-readable string representation.
+
+**Example:**
+```python
+constraints = BinningConstraints(max_bins=5, min_samples=0.1)
+print(constraints)
+# Output: BinningConstraints(max_bins=5, min_bins=4, min_samples=0.1, ...)
+```
+
+## Usage Patterns
 
 ### Basic Usage with Fractions
 ```python
@@ -174,6 +228,14 @@ constraints_min = BinningConstraints(
 - PAVA creates initial monotonic blocks
 - Constraints guide subsequent merging
 
+### Priority Order
+When constraints conflict, the priority is:
+1. **min_samples**: Ensures statistical reliability
+2. **min_positives**: Ensures class representation (binary only)
+3. **max_bins**: Limits complexity
+4. **min_bins**: Ensures sufficient granularity
+5. **max_samples**: Prevents oversized bins
+
 ## Error Handling
 
 ### Common Errors
@@ -201,6 +263,40 @@ constraints = BinningConstraints(
 constraints.resolve(total_n=1000)  # min=200 > max=100
 ```
 
+4. **Infeasible Combinations**
+```python
+constraints = BinningConstraints(
+    min_bins=5,
+    min_samples=0.3  # 30% each = 150% total!
+)
+# Will fail during merging if data size makes it impossible
+```
+
+## Advanced Features
+
+### Dynamic P-value Annealing
+The `initial_pvalue` is automatically adjusted during merging:
+```python
+# Starts at initial_pvalue
+current_pvalue = constraints.initial_pvalue
+
+# If no valid merges found, reduces by factor
+while no_valid_merges and current_pvalue > 0.01:
+    current_pvalue *= 0.9  # Anneal
+    # Retry merge selection
+```
+
+### Constraint Relaxation
+When strict constraints cannot be satisfied:
+```python
+# System may relax constraints with warnings
+if cannot_satisfy_min_samples:
+    logger.warning(
+        "Cannot satisfy min_samples=%d, relaxing to %d",
+        original_min, relaxed_min
+    )
+```
+
 ## Best Practices
 
 1. **Use Fractions for Portability**: Fractional constraints adapt to different dataset sizes
@@ -208,19 +304,66 @@ constraints.resolve(total_n=1000)  # min=200 > max=100
 3. **Consider Data Size**: Ensure constraints are feasible for your data size
 4. **Binary vs Continuous**: Use `min_positives` only for binary targets
 5. **Validate Early**: Constraints are validated at initialization and resolution
+6. **Monitor Warnings**: Pay attention to constraint relaxation warnings
+
+## Integration Examples
+
+### With MonotonicBinner
+```python
+from MOBPY import MonotonicBinner, BinningConstraints
+
+constraints = BinningConstraints(
+    max_bins=5,
+    min_samples=0.05,
+    min_positives=0.01
+)
+
+binner = MonotonicBinner(
+    df, x='age', y='default',
+    constraints=constraints  # Automatically resolved during fit
+)
+binner.fit()
+```
+
+### Manual Resolution
+```python
+# For testing or debugging
+constraints = BinningConstraints(min_samples=0.1)
+
+# Check before resolution
+assert not constraints.is_resolved
+
+# Manually resolve
+n_clean = len(df)
+n_positives = df['y'].sum()
+constraints.resolve(total_n=n_clean, total_pos=n_positives)
+
+# Check after resolution
+assert constraints.is_resolved
+assert constraints.abs_min_samples == int(0.1 * n_clean)
+```
 
 ## Performance Notes
 
-- Resolution is O(1) - simple arithmetic operations
-- Validation is O(1) - direct comparisons
-- No impact on binning algorithm performance
+- **Resolution**: O(1) - simple arithmetic operations
+- **Validation**: O(1) - direct comparisons
+- **Copy**: O(1) - shallow copy of primitive values
+- **No impact on binning algorithm performance**
 
-## Integration Notes
+## Thread Safety
 
-- Used by `MonotonicBinner` during fit process
-- Resolution happens automatically on clean data partition
-- Guides the `merge_adjacent` function behavior
-- Works with `MergeStrategy` enum for merge selection
+BinningConstraints instances are thread-safe for read operations after resolution. For concurrent modifications, use separate instances or appropriate locking.
+
+## Configuration Interaction
+
+Constraints respect global configuration:
+```python
+from MOBPY.config import get_config
+
+config = get_config()
+# May use config.epsilon for numerical comparisons
+# May use config.warn_on_small_bins for warnings
+```
 
 ## Dependencies
 - Python dataclasses
@@ -228,6 +371,7 @@ constraints.resolve(total_n=1000)  # min=200 > max=100
 - MOBPY.exceptions
 
 ## See Also
-- [`MonotonicBinner`](../binning/mob.md) - Main binning orchestrator
-- [`merge_adjacent`](./merge.md) - Block merging using constraints
+- [`MonotonicBinner`](../binning/mob.md) - Main binning orchestrator using constraints
+- [`merge_adjacent`](./merge.md) - Block merging that respects constraints
 - [`PAVA`](./pava.md) - Initial monotonic block creation
+- [`Configuration`](../config.md) - Global configuration settings

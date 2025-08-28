@@ -1,370 +1,404 @@
-# Utilities Module Documentation
+# Core Utilities Module Documentation
 
 ## Overview
-The utils module provides helper functions for data validation, partitioning, statistical calculations, and other common operations used throughout the MOBPY library. These utilities ensure data integrity and support the core binning algorithms.
+The utils module provides essential helper functions for data validation, partitioning, statistical calculations, and WoE/IV computations. These utilities are used throughout the MOBPY package to ensure data quality and provide common functionality.
 
 ## Module Location
 `src/MOBPY/core/utils.py`
 
-## Main Functions
+## Data Validation Functions
 
-### Data Validation Functions
-
-#### `ensure_numeric_series()`
-Validates that a pandas Series contains numeric data.
-
-```python
-def ensure_numeric_series(s: pd.Series, name: str) -> None
-```
+### `ensure_numeric_series(s: pd.Series, name: str) -> pd.Series`
+Validates that a pandas Series contains numeric data and converts if possible.
 
 **Parameters:**
 - **s** (`pd.Series`): Series to validate
-- **name** (`str`): Name for error messages
+- **name** (`str`): Name of the series for error messages
+
+**Returns:**
+- `pd.Series`: Numeric series
 
 **Raises:**
-- `DataError`: If series is not numeric or contains infinite values
-
-**Checks:**
-- Data type is numeric
-- No infinite values (±∞)
-- NaN values are allowed
+- `DataError`: If series cannot be converted to numeric
 
 **Example:**
 ```python
-ensure_numeric_series(df['feature'], 'feature')
-# Raises DataError if not numeric or has infinite values
+from MOBPY.core.utils import ensure_numeric_series
+
+# Validates and converts
+numeric_series = ensure_numeric_series(df['age'], 'age')
+
+# Raises DataError if non-numeric
+text_series = pd.Series(['a', 'b', 'c'])
+ensure_numeric_series(text_series, 'text')  # Raises DataError
 ```
 
-#### `is_binary_series()`
-Checks if a Series contains binary values.
-
-```python
-def is_binary_series(
-    s: pd.Series,
-    strict: bool = True
-) -> bool
-```
+### `is_binary_series(s: pd.Series, strict: bool = False) -> bool`
+Checks if a series contains only binary values (0 and 1).
 
 **Parameters:**
 - **s** (`pd.Series`): Series to check
-- **strict** (`bool`): If True, requires exactly {0, 1} values. If False, allows any two unique values that can be coerced to {0, 1}
+- **strict** (`bool`): If True, requires exactly {0, 1}. If False, allows {0} or {1} only
 
-**Returns:** `bool` - True if series is binary
-
-**Notes:**
-- NaN values are ignored in the check
-- Empty series returns False
-- Single unique value returns False
+**Returns:**
+- `bool`: True if series is binary
 
 **Example:**
 ```python
-# Strict mode (default)
-s1 = pd.Series([0, 1, 1, 0, np.nan])
-is_binary_series(s1)  # True
+from MOBPY.core.utils import is_binary_series
 
-s2 = pd.Series([True, False, True])
-is_binary_series(s2, strict=True)   # False (not exactly 0/1)
-is_binary_series(s2, strict=False)  # True (can be coerced)
+# Binary series
+binary = pd.Series([0, 1, 1, 0, 1])
+assert is_binary_series(binary)  # True
+
+# Non-strict allows single value
+all_zeros = pd.Series([0, 0, 0])
+assert is_binary_series(all_zeros, strict=False)  # True
+assert not is_binary_series(all_zeros, strict=True)  # False
+
+# Non-binary
+continuous = pd.Series([0.1, 0.5, 0.9])
+assert not is_binary_series(continuous)  # False
 ```
 
-#### `validate_column_exists()`
-Validates that columns exist in a DataFrame.
-
-```python
-def validate_column_exists(
-    df: pd.DataFrame,
-    columns: Union[str, list]
-) -> None
-```
+### `validate_column_exists(df: pd.DataFrame, columns: Union[str, List[str]]) -> None`
+Validates that specified columns exist in a DataFrame.
 
 **Parameters:**
 - **df** (`pd.DataFrame`): DataFrame to check
-- **columns** (`str` or `list`): Column name(s) to validate
+- **columns** (`Union[str, List[str]]`): Column name(s) to validate
 
 **Raises:**
 - `DataError`: If any column is missing
 
 **Example:**
 ```python
-df = pd.DataFrame({'a': [1, 2], 'b': [3, 4]})
-validate_column_exists(df, 'a')        # OK
-validate_column_exists(df, ['a', 'b']) # OK
-validate_column_exists(df, 'c')        # Raises DataError
+from MOBPY.core.utils import validate_column_exists
+
+# Single column
+validate_column_exists(df, 'age')
+
+# Multiple columns
+validate_column_exists(df, ['age', 'income', 'default'])
+
+# Raises DataError if missing
+validate_column_exists(df, 'nonexistent')  # Raises DataError
 ```
 
-### Data Partitioning
+## Data Partitioning
 
-#### `partition_df()`
-Partitions DataFrame into clean, missing, and excluded subsets.
-
-```python
-def partition_df(
-    df: pd.DataFrame,
-    x: str,
-    exclude_values: Optional[Iterable] = None,
-    validate: bool = True
-) -> Parts
-```
+### `partition_df(df: pd.DataFrame, x: str, exclude_values: Optional[Iterable] = None) -> Parts`
+Partitions a DataFrame based on missing values and excluded values in the x column.
 
 **Parameters:**
 - **df** (`pd.DataFrame`): Input DataFrame
-- **x** (`str`): Column name to partition on
-- **exclude_values** (`Iterable`): Values to exclude from clean partition (e.g., [-999, -1] for special codes)
-- **validate** (`bool`): Whether to validate the input column exists
+- **x** (`str`): Column name to partition by
+- **exclude_values** (`Optional[Iterable]`): Values to exclude (e.g., special codes like -999)
 
-**Returns:** `Parts` object containing three DataFrames
-
-**Partitioning Logic:**
-- **Clean**: Valid numeric values not in exclude_values
-- **Missing**: Rows where x is NaN/null
-- **Excluded**: Rows where x matches any exclude_values
+**Returns:**
+- `Parts`: Object containing clean, missing, and excluded DataFrames
 
 **Example:**
 ```python
-df = pd.DataFrame({
-    'feature': [1, 2, np.nan, -999, 5, 6],
-    'target': [0, 1, 1, 0, 1, 0]
-})
+from MOBPY.core.utils import partition_df
 
-parts = partition_df(df, 'feature', exclude_values=[-999])
-print(f"Clean: {len(parts.clean)}")     # 4
-print(f"Missing: {len(parts.missing)}")  # 1
-print(f"Excluded: {len(parts.excluded)}") # 1
-```
+# Basic partitioning
+parts = partition_df(df, x='age')
+print(f"Clean rows: {len(parts.clean)}")
+print(f"Missing rows: {len(parts.missing)}")
 
-#### `Parts` Dataclass
-Container for partitioned data.
+# With excluded values (special codes)
+parts = partition_df(df, x='age', exclude_values=[-999, -1])
+print(f"Excluded rows: {len(parts.excluded)}")
 
-```python
-@dataclass(frozen=True)
-class Parts:
-    clean: pd.DataFrame
-    missing: pd.DataFrame
-    excluded: pd.DataFrame
-```
-
-**Methods:**
-
-- `summary() -> Dict[str, int]`: Get partition sizes
-- `validate() -> bool`: Check that partitions don't overlap
-
-**Example:**
-```python
-parts = partition_df(df, 'feature', exclude_values=[-999])
+# Access partitions
+clean_df = parts.clean
+missing_df = parts.missing
+excluded_df = parts.excluded
 
 # Get summary
 summary = parts.summary()
-print(f"Total rows: {summary['total']}")
-
-# Validate no overlap
-assert parts.validate()  # True if no overlapping indices
+print(summary)
 ```
 
-### Statistical Calculations
+### `Parts` Class
+Container for partitioned DataFrames with validation and summary methods.
 
-#### `calculate_correlation()`
-Calculates correlation between two series.
+**Attributes:**
+- **clean** (`pd.DataFrame`): Rows with valid x values
+- **missing** (`pd.DataFrame`): Rows with missing x values
+- **excluded** (`pd.DataFrame`): Rows with excluded x values
 
-```python
-def calculate_correlation(
-    x: pd.Series,
-    y: pd.Series,
-    method: str = 'pearson'
-) -> float
-```
+**Methods:**
 
-**Parameters:**
-- **x, y** (`pd.Series`): Series to correlate
-- **method** (`str`): Correlation method ('pearson', 'spearman', 'kendall')
-
-**Returns:** `float` - Correlation coefficient
-
-**Example:**
-```python
-corr = calculate_correlation(df['feature'], df['target'])
-print(f"Correlation: {corr:.3f}")
-```
-
-#### `woe_iv()`
-Calculates Weight of Evidence and Information Value.
-
-```python
-def woe_iv(
-    goods: np.ndarray,
-    bads: np.ndarray,
-    smoothing: float = 0.5,
-    return_components: bool = False
-) -> Union[Tuple[np.ndarray, np.ndarray], Dict[str, np.ndarray]]
-```
-
-**Parameters:**
-- **goods** (`np.ndarray`): Count of good outcomes per bin
-- **bads** (`np.ndarray`): Count of bad outcomes per bin
-- **smoothing** (`float`): Laplace smoothing factor to prevent division by zero
-- **return_components** (`bool`): If True, return detailed components
+#### `summary() -> Dict[str, Any]`
+Returns a summary dictionary with partition statistics.
 
 **Returns:**
-- If `return_components=False`: Tuple of (woe_array, iv_array)
-- If `return_components=True`: Dict with keys: 'woe', 'iv', 'good_rate', 'bad_rate', 'total_iv'
+```python
+{
+    'total_rows': int,
+    'clean_rows': int,
+    'missing_rows': int,
+    'excluded_rows': int,
+    'clean_pct': float,
+    'missing_pct': float,
+    'excluded_pct': float
+}
+```
+
+#### `validate() -> None`
+Validates that partitions are disjoint and complete.
+
+**Raises:**
+- `DataError`: If partitions overlap or don't sum to total
+
+**Example:**
+```python
+parts = partition_df(df, x='age', exclude_values=[-999])
+
+# Get summary statistics
+summary = parts.summary()
+print(f"Clean: {summary['clean_pct']:.1%}")
+print(f"Missing: {summary['missing_pct']:.1%}")
+print(f"Excluded: {summary['excluded_pct']:.1%}")
+
+# Validate partitions
+parts.validate()  # Raises if inconsistent
+```
+
+## Statistical Functions
+
+### `calculate_correlation(x: pd.Series, y: pd.Series, method: str = 'pearson') -> float`
+Calculates correlation between two series.
+
+**Parameters:**
+- **x** (`pd.Series`): First variable
+- **y** (`pd.Series`): Second variable  
+- **method** (`str`): Correlation method ('pearson', 'spearman', 'kendall')
+
+**Returns:**
+- `float`: Correlation coefficient
+
+**Raises:**
+- `ValueError`: If method is invalid or series have different lengths
+
+**Example:**
+```python
+from MOBPY.core.utils import calculate_correlation
+
+# Pearson correlation (default)
+corr = calculate_correlation(df['age'], df['income'])
+
+# Spearman rank correlation
+corr = calculate_correlation(df['age'], df['income'], method='spearman')
+
+# Kendall tau correlation
+corr = calculate_correlation(df['age'], df['income'], method='kendall')
+```
+
+### `woe_iv(goods: Union[int, np.ndarray], bads: Union[int, np.ndarray], smoothing: float = 0.5) -> Tuple[np.ndarray, np.ndarray]`
+Calculates Weight of Evidence (WoE) and Information Value (IV) for binary classification.
+
+**Parameters:**
+- **goods** (`Union[int, np.ndarray]`): Count of good outcomes (y=0)
+- **bads** (`Union[int, np.ndarray]`): Count of bad outcomes (y=1)
+- **smoothing** (`float`): Smoothing factor to avoid division by zero
+
+**Returns:**
+- `Tuple[np.ndarray, np.ndarray]`: (WoE values, IV contributions)
 
 **Formulas:**
-```python
-# WoE (Weight of Evidence)
-WoE = ln(good_rate / bad_rate)
-
-# IV (Information Value)
-IV = (good_rate - bad_rate) * WoE
-
-# With smoothing
-good_rate = (goods + smoothing) / (total_goods + smoothing * n_bins)
-bad_rate = (bads + smoothing) / (total_bads + smoothing * n_bins)
+```
+WoE = ln((goods_i / total_goods) / (bads_i / total_bads))
+IV_i = (goods_i / total_goods - bads_i / total_bads) * WoE_i
 ```
 
 **Example:**
 ```python
-# Bin statistics
-goods = np.array([80, 60, 40])  # Good counts per bin
-bads = np.array([20, 40, 60])   # Bad counts per bin
+from MOBPY.core.utils import woe_iv
 
-# Calculate WoE/IV
-woe_vals, iv_vals = woe_iv(goods, bads)
+# Single bin
+goods, bads = 100, 20
+woe, iv = woe_iv(goods, bads)
 
-# Or get detailed components
-result = woe_iv(goods, bads, return_components=True)
-print(f"Total IV: {result['total_iv']:.3f}")
-print(f"WoE values: {result['woe']}")
+# Multiple bins
+goods = np.array([100, 150, 80, 120])
+bads = np.array([20, 40, 35, 25])
+woe_values, iv_values = woe_iv(goods, bads)
+
+print(f"WoE: {woe_values}")
+print(f"IV contributions: {iv_values}")
+print(f"Total IV: {iv_values.sum():.4f}")
 ```
 
-### Type Checking Functions
+### `compute_gini(y_true: np.ndarray, y_score: np.ndarray) -> float`
+Calculates Gini coefficient for model performance.
 
-#### `is_numeric_dtype()`
-Checks if Series has numeric dtype.
+**Parameters:**
+- **y_true** (`np.ndarray`): True binary labels
+- **y_score** (`np.ndarray`): Predicted scores or probabilities
 
+**Returns:**
+- `float`: Gini coefficient (2 * AUC - 1)
+
+**Example:**
 ```python
-def is_numeric_dtype(s: pd.Series) -> bool
+from MOBPY.core.utils import compute_gini
+
+y_true = np.array([0, 0, 1, 1, 0, 1])
+y_scores = np.array([0.1, 0.2, 0.8, 0.9, 0.3, 0.7])
+
+gini = compute_gini(y_true, y_scores)
+print(f"Gini coefficient: {gini:.4f}")
 ```
 
-**Returns:** `bool` - True if numeric dtype
+## Helper Functions
 
-#### `has_special_values()`
-Checks for special values in Series.
+### `safe_divide(numerator: float, denominator: float, default: float = 0.0) -> float`
+Safely divides two numbers, returning a default value if denominator is zero.
 
+**Parameters:**
+- **numerator** (`float`): Numerator
+- **denominator** (`float`): Denominator
+- **default** (`float`): Value to return if denominator is zero
+
+**Returns:**
+- `float`: Result of division or default value
+
+**Example:**
 ```python
-def has_special_values(
-    s: pd.Series,
-    special_values: Iterable
-) -> bool
+from MOBPY.core.utils import safe_divide
+
+# Normal division
+result = safe_divide(10, 2)  # 5.0
+
+# Division by zero
+result = safe_divide(10, 0)  # 0.0 (default)
+result = safe_divide(10, 0, default=-1)  # -1
 ```
 
-**Returns:** `bool` - True if any special values found
+### `format_number(value: float, precision: int = 4) -> str`
+Formats a number for display with appropriate precision.
 
-## WoE/IV Interpretation Guide
+**Parameters:**
+- **value** (`float`): Number to format
+- **precision** (`int`): Number of decimal places
 
-### Weight of Evidence (WoE)
-- **Positive WoE**: Good rate > Bad rate (lower risk)
-- **Negative WoE**: Good rate < Bad rate (higher risk)
-- **Zero WoE**: Good rate = Bad rate (neutral)
+**Returns:**
+- `str`: Formatted string
 
-### Information Value (IV) Ranges
-| IV Range | Predictive Power |
-|----------|-----------------|
-| < 0.02 | Useless |
-| 0.02 - 0.1 | Weak |
-| 0.1 - 0.3 | Medium |
-| 0.3 - 0.5 | Strong |
-| > 0.5 | Suspicious (too good) |
+**Example:**
+```python
+from MOBPY.core.utils import format_number
 
-## Usage Patterns
+print(format_number(0.123456))  # "0.1235"
+print(format_number(1234567))   # "1.235e+06"
+print(format_number(np.inf))    # "inf"
+```
 
-### Complete Validation Pipeline
+### `check_monotonicity(values: np.ndarray, sign: str, epsilon: float = 1e-10) -> bool`
+Checks if an array is monotonic in the specified direction.
+
+**Parameters:**
+- **values** (`np.ndarray`): Array to check
+- **sign** (`str`): '+' for non-decreasing, '-' for non-increasing
+- **epsilon** (`float`): Tolerance for numerical comparisons
+
+**Returns:**
+- `bool`: True if monotonic in specified direction
+
+**Example:**
+```python
+from MOBPY.core.utils import check_monotonicity
+
+# Non-decreasing
+values = np.array([1, 2, 2, 3, 5])
+assert check_monotonicity(values, '+')
+
+# Non-increasing
+values = np.array([5, 3, 3, 2, 1])
+assert check_monotonicity(values, '-')
+
+# Not monotonic
+values = np.array([1, 3, 2, 4])
+assert not check_monotonicity(values, '+')
+```
+
+## Integration Examples
+
+### Complete Data Preparation Pipeline
 ```python
 from MOBPY.core.utils import (
     validate_column_exists,
+    partition_df,
     ensure_numeric_series,
-    is_binary_series,
-    partition_df
+    is_binary_series
 )
 
-# Step 1: Validate columns exist
-validate_column_exists(df, ['feature', 'target'])
-
-# Step 2: Check target type
-is_binary = is_binary_series(df['target'])
-
-# Step 3: Partition data
-parts = partition_df(
-    df, 
-    x='feature',
-    exclude_values=[-999, -1]
-)
-
-# Step 4: Validate clean data
-ensure_numeric_series(parts.clean['feature'], 'feature')
-ensure_numeric_series(parts.clean['target'], 'target')
-
-print(f"Ready for binning: {len(parts.clean)} clean rows")
+def prepare_data(df, x_col, y_col, exclude_values=None):
+    """Complete data preparation pipeline."""
+    
+    # 1. Validate columns exist
+    validate_column_exists(df, [x_col, y_col])
+    
+    # 2. Partition by missing/excluded
+    parts = partition_df(df, x=x_col, exclude_values=exclude_values)
+    
+    # 3. Ensure numeric data on clean partition
+    clean_df = parts.clean.copy()
+    clean_df[x_col] = ensure_numeric_series(clean_df[x_col], x_col)
+    clean_df[y_col] = ensure_numeric_series(clean_df[y_col], y_col)
+    
+    # 4. Check if target is binary
+    is_binary = is_binary_series(clean_df[y_col])
+    
+    # 5. Print summary
+    summary = parts.summary()
+    print(f"Data summary:")
+    print(f"  Total rows: {summary['total_rows']}")
+    print(f"  Clean: {summary['clean_rows']} ({summary['clean_pct']:.1%})")
+    print(f"  Missing: {summary['missing_rows']} ({summary['missing_pct']:.1%})")
+    print(f"  Excluded: {summary['excluded_rows']} ({summary['excluded_pct']:.1%})")
+    print(f"  Target is binary: {is_binary}")
+    
+    return clean_df, is_binary, parts
 ```
 
-### WoE/IV Calculation Workflow
+### WoE/IV Calculation for Binning
 ```python
-# After binning, calculate WoE/IV for each bin
-bin_stats = []
-for bin in bins:
-    mask = (df['feature'] >= bin['left']) & (df['feature'] < bin['right'])
-    bin_data = df[mask]
+from MOBPY.core.utils import woe_iv
+import pandas as pd
+
+def calculate_bin_woe_iv(bins_df, y_binary):
+    """Calculate WoE and IV for bins."""
     
-    goods = (bin_data['target'] == 0).sum()
-    bads = (bin_data['target'] == 1).sum()
-    bin_stats.append({'good': goods, 'bad': bads})
-
-# Extract arrays
-goods = np.array([b['good'] for b in bin_stats])
-bads = np.array([b['bad'] for b in bin_stats])
-
-# Calculate WoE/IV
-result = woe_iv(goods, bads, return_components=True)
-
-# Add to bin summary
-for i, bin in enumerate(bins):
-    bin['woe'] = result['woe'][i]
-    bin['iv'] = result['iv'][i]
-
-print(f"Total IV: {result['total_iv']:.3f}")
-```
-
-## Error Handling
-
-### Common Errors
-
-1. **DataError**: Missing columns, non-numeric data, infinite values
-2. **ValueError**: Invalid correlation method, empty data
-3. **Warning**: All NaN values, zero variance
-
-### Defensive Programming
-```python
-# Always validate before processing
-try:
-    validate_column_exists(df, required_cols)
-    ensure_numeric_series(df[x_col], x_col)
-    
-    if is_binary_series(df[y_col]):
-        # Binary target processing
-        pass
-    else:
-        # Continuous target processing
-        pass
+    results = []
+    for _, bin_row in bins_df.iterrows():
+        # Count goods (y=0) and bads (y=1)
+        mask = (df['x'] >= bin_row['left']) & (df['x'] < bin_row['right'])
+        bin_y = y_binary[mask]
         
-except DataError as e:
-    logger.error(f"Data validation failed: {e}")
-    raise
+        goods = (bin_y == 0).sum()
+        bads = (bin_y == 1).sum()
+        
+        # Calculate WoE and IV
+        woe, iv = woe_iv(goods, bads, smoothing=0.5)
+        
+        results.append({
+            'bin': f"[{bin_row['left']}, {bin_row['right']})",
+            'goods': goods,
+            'bads': bads,
+            'woe': woe[0],
+            'iv': iv[0]
+        })
+    
+    results_df = pd.DataFrame(results)
+    total_iv = results_df['iv'].sum()
+    
+    print(f"Total IV: {total_iv:.4f}")
+    return results_df
 ```
-
-## Performance Notes
-
-- **Partitioning**: O(n) for single pass through data
-- **Validation**: O(n) for checking values
-- **WoE/IV**: O(k) where k is number of bins
-- **Correlation**: O(n) for computation
 
 ## Best Practices
 
@@ -385,15 +419,57 @@ config = get_config()
 # Uses config.validate_inputs for validation behavior
 ```
 
+## Performance Notes
+
+- **Vectorized Operations**: Uses numpy/pandas for efficiency
+- **Memory Efficient**: Avoids unnecessary copies
+- **Lazy Validation**: Only validates when necessary
+- **Caching**: Some functions cache results when appropriate
+
+## Error Handling
+
+Common error scenarios:
+
+1. **Non-numeric Data**
+```python
+# Handled by ensure_numeric_series
+try:
+    ensure_numeric_series(text_series, 'feature')
+except DataError as e:
+    print(f"Cannot convert to numeric: {e}")
+```
+
+2. **Missing Columns**
+```python
+# Handled by validate_column_exists
+try:
+    validate_column_exists(df, 'nonexistent')
+except DataError as e:
+    print(f"Column not found: {e}")
+```
+
+3. **Invalid Partitions**
+```python
+# Handled by Parts.validate()
+try:
+    parts.validate()
+except DataError as e:
+    print(f"Partition error: {e}")
+```
+
+## Thread Safety
+
+All functions are thread-safe for read operations. For write operations on shared data, use appropriate locking.
+
 ## Dependencies
 - numpy
-- pandas
-- scipy
+- pandas  
+- scipy (for correlation calculations)
 - MOBPY.exceptions
 - MOBPY.config
 
 ## See Also
-- [`MonotonicBinner`](../binning/mob.md) - Uses these utilities
+- [`MonotonicBinner`](../binning/mob.md) - Uses these utilities extensively
 - [`BinningConstraints`](./constraints.md) - Works with partitioned data
 - [`PAVA`](./pava.md) - Uses validation functions
 - [`merge_adjacent`](./merge.md) - Uses statistical functions
