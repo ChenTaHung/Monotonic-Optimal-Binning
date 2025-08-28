@@ -12,50 +12,35 @@ MOBPY (Monotonic Optimal Binning for Python) is a fast, deterministic library fo
 
 ### Core Public API
 
-#### `MonotonicBinner`
+#### MonotonicBinner
 The main orchestrator class for monotonic optimal binning.
 - **Import**: `from MOBPY import MonotonicBinner`
 - **Purpose**: End-to-end monotonic binning pipeline
+- **Documentation**: [Full MonotonicBinner API](./binning/mob.md)
 
-#### `BinningConstraints`
+#### BinningConstraints
 Configuration class for binning constraints.
 - **Import**: `from MOBPY import BinningConstraints`
 - **Purpose**: Define constraints for the binning process
+- **Documentation**: [Full BinningConstraints API](./core/constraints.md)
 
-### Module Structure
-
-```
-MOBPY/
-├── binning/          # Binning orchestrators
-├── core/             # Core algorithms and utilities
-└── plot/             # Visualization utilities
-```
-
-## Quick Start Example
+### Quick Start
 
 ```python
 from MOBPY import MonotonicBinner, BinningConstraints
 import pandas as pd
 
-# Create sample data
-df = pd.DataFrame({
-    'feature': [...],
-    'target': [...]
-})
+# Load and prepare data
+df = pd.read_csv('your_data.csv')
 
-# Define constraints
+# Configure constraints
 constraints = BinningConstraints(
     max_bins=6,
-    min_samples=0.05
+    min_samples=0.05  # 5% minimum
 )
 
-# Create and fit binner
-binner = MonotonicBinner(
-    df=df, 
-    x='feature', 
-    y='target',
-    constraints=constraints
-)
+# Fit and transform
+binner = MonotonicBinner(df, x='feature', y='target', constraints=constraints)
 binner.fit()
 
 # Get results
@@ -63,31 +48,27 @@ bins = binner.bins_()
 summary = binner.summary_()
 ```
 
+For detailed examples and parameters, see:
+- [Complete workflow example](./MOBPY-Overview.md#complete-workflow-example)
+- [MonotonicBinner documentation](./binning/mob.md)
+- [Plotting examples](./plot/init.md)
+
 ## Available Functions
 
-### `get_version() -> str`
+### get_version()
 Returns the current version of MOBPY.
 
-**Returns:**
-- `str`: Version string in semantic versioning format (e.g., "2.0.0")
-
-**Example:**
 ```python
 from MOBPY import get_version
 print(get_version())  # Output: "2.0.0"
 ```
 
 ## Module Access
-Advanced users can access internal modules directly:
 
-```python
-from MOBPY import core, binning, plot
-
-# Access specific submodules
-from MOBPY.core import pava, merge, utils
-from MOBPY.binning import mob
-from MOBPY.plot import mob_plot, csd_gcm
-```
+Advanced users can access internal modules directly. See individual module documentation:
+- [Core algorithms](./core/) - PAVA, merging, utilities
+- [Binning module](./binning/) - MonotonicBinner implementation
+- [Plot module](./plot/) - Visualization tools
 
 ## Key Features
 - **Deterministic & Fast**: Stack-based PAVA with O(k) adjacent merges
