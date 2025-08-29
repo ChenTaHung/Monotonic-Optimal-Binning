@@ -189,25 +189,11 @@ MOBPY is ideal for:
 - **Feature Engineering**: Generate interpretable binned features for ML models
 - **Regulatory Reporting**: Ensure transparent, monotonic relationships in models
 
-## 🔧 Performance
-
-MOBPY is optimized for production use:
-
-- **Time Complexity**: O(n log n) for sorting + O(n) for PAVA + O(k²) for merging
-- **Space Complexity**: O(n) for data storage
-- **Scalability**: Handles datasets from 10² to 10⁶ samples efficiently
-
-Benchmark on 1M samples, 20 final bins:
-- Data preparation: 0.3s
-- PAVA fitting: 0.8s
-- Constraint merging: 0.2s
-- **Total time: ~1.3s**
-
 ## 📚 Documentation
 
 - [API Reference](docs/api_reference.md) - Complete API documentation
 - [Algorithm Details](docs/core) - Mathematical foundations
-- [Examples](examples/) - Jupyter notebooks with real-world examples
+- [Examples & Tutorials](examples/) - Jupyter notebooks with real-world examples
 
 ## 🧪 Testing
 
