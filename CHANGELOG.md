@@ -2,10 +2,7 @@
 
 All notable changes to MOBPY will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [2.0.0] - 2024-01-XX
+## [2.0.0] - 2022025-08-28
 
 ### 🎉 Major Release
 
@@ -37,50 +34,8 @@ This is a complete rewrite of the monotonic optimal binning library with signifi
 - **Improved API** with cleaner, more intuitive interface
 - **Better error handling** with custom exception hierarchy
 - **Enhanced documentation** with detailed API references and examples
-- **Optimized performance** for datasets from 10² to 10⁶ samples
-
-### Fixed
-- Numerical stability issues in edge cases
-- Memory leaks in large dataset processing
-- Monotonicity violations in certain constraint combinations
-- Handling of missing values and infinite values
-
-### Performance
-- **10x faster** PAVA implementation compared to v1.x
-- **50% reduction** in memory usage for large datasets
-- **Deterministic** results (no randomness in algorithm)
-
-## [1.0.0] - 2023-XX-XX
-
-### Initial Release
-- Basic monotonic binning functionality
-- Simple PAVA implementation
-- Basic constraint support
 
 ---
-
-## Upgrade Guide
-
-### From 1.x to 2.0
-
-The API has changed significantly. Here's how to migrate:
-
-**Old (1.x):**
-```python
-from mob import MOB
-mob = MOB(data, x='feature', y='target')
-result = mob.fit()
-```
-
-**New (2.0):**
-```python
-from MOBPY import MonotonicBinner, BinningConstraints
-
-constraints = BinningConstraints(max_bins=6, min_samples=0.05)
-binner = MonotonicBinner(df, x='feature', y='target', constraints=constraints)
-binner.fit()
-result = binner.summary_()
-```
 
 ### Key Migration Points:
 1. Package name changed from `mob` to `MOBPY`

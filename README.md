@@ -5,7 +5,7 @@
 [![Run Tests](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/actions/workflows/RunTests.yml/badge.svg?branch=main)](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/actions/workflows/RunTests.yml)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PyPI version](https://badge.fury.io/py/mobpy.svg)](https://badge.fury.io/py/mobpy)
+[![PyPI version](https://badge.fury.io/py/MOBPY.svg)](https://pypi.org/project/MOBPY/)
 
 A fast, deterministic Python library for creating **monotonic optimal bins** with respect to a target variable. MOBPY implements a stack-based Pool-Adjacent-Violators Algorithm (PAVA) followed by constrained adjacent merging, ensuring strict monotonicity and statistical robustness.
 
