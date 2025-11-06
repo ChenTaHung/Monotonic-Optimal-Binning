@@ -2,6 +2,20 @@
 
 All notable changes to MOBPY will be documented in this file.
 
+## [2.1.0] - 2025-11-06
+
+### Fixed
+- Fixed exluded bins don't calculate woe and iv. 
+- Fixed `TypeError` when comparing constraints with None values in `_check_constraints_satisfied()`
+- Fixed `TypeError: 'NoneType' object is not iterable` in `transform()` method
+- Now properly uses `abs_min_samples` and `abs_min_positives` instead of nullable constraint values
+- Added None checks for `exclude_values` in transform operations
+
+### Changed
+- Now the excluded bin will show the WoE and iv calcualted.
+- Improved constraint validation to use resolved absolute values
+- Enhanced `__init__` parameter validation and error messages
+
 ## [2.0.0] - 2022025-08-28
 
 ### 🎉 Major Release

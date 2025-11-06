@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 MOBPY Release Script for PyPI
-Version 2.0.0
+Version 2.1.0
 
 This script automates the release process for MOBPY to PyPI.
 """
@@ -10,7 +10,24 @@ import os
 import sys
 import shutil
 import subprocess
+import re
 from pathlib import Path
+
+
+def get_package_version():
+    """Extract version from pyproject.toml."""
+    pyproject_path = Path("pyproject.toml")
+    if not pyproject_path.exists():
+        print("❌ pyproject.toml not found!")
+        sys.exit(1)
+    
+    content = pyproject_path.read_text()
+    match = re.search(r'version\s*=\s*"([^"]+)"', content)
+    if match:
+        return match.group(1)
+    
+    print("❌ Could not find version in pyproject.toml")
+    sys.exit(1)
 
 
 def run_command(cmd, check=True):
@@ -37,8 +54,16 @@ def clean_build_dirs():
 
 
 def main():
-    print("🚀 MOBPY Release Script v2.0.0")
+    # Get version dynamically
+    version = get_package_version()
+    
+    print(f"🚀 MOBPY Release Script v{version}")
     print("=" * 40)
+    
+    # Check we're in the right directory
+    if not Path("pyproject.toml").exists():
+        print("❌ Must run from project root directory")
+        sys.exit(1)
     
     # Check Python version
     print("\n📌 Checking Python version...")
@@ -48,6 +73,26 @@ def main():
     if python_version < (3, 9):
         print("❌ Python 3.9+ required")
         sys.exit(1)
+    
+    # Verify version consistency
+    print(f"\n🔍 Verifying version consistency...")
+    print(f"   pyproject.toml: {version}")
+    
+    # Check __init__.py version
+    init_file = Path("src/MOBPY/__init__.py")
+    if init_file.exists():
+        init_content = init_file.read_text()
+        init_match = re.search(r'__version__\s*=\s*"([^"]+)"', init_content)
+        if init_match:
+            init_version = init_match.group(1)
+            print(f"   __init__.py:    {init_version}")
+            if init_version != version:
+                print(f"❌ Version mismatch! Fix __init__.py to match {version}")
+                sys.exit(1)
+        else:
+            print("⚠️  Could not verify __init__.py version")
+    
+    print("   ✅ Version consistency check passed")
     
     # Clean previous builds
     clean_build_dirs()
@@ -85,7 +130,7 @@ def main():
     # Ask for upload confirmation
     print("\n⚠️  Ready to upload to PyPI?")
     print("   Package: MOBPY")
-    print("   Version: 2.0.0")
+    print(f"   Version: {version}")
     print()
     
     test_upload = input("Upload to TestPyPI first? (recommended) [y/N]: ").strip().lower()
@@ -96,7 +141,7 @@ def main():
         
         print("\n✅ Uploaded to TestPyPI!")
         print("   Test install with:")
-        print("   pip install --index-url https://test.pypi.org/simple/ MOBPY")
+        print(f"   pip install --index-url https://test.pypi.org/simple/ MOBPY=={version}")
         print()
         
         prod_upload = input("Continue to production PyPI? [y/N]: ").strip().lower()
@@ -104,7 +149,7 @@ def main():
         if prod_upload == 'y':
             print("\n📤 Uploading to PyPI...")
             run_command("twine upload dist/*")
-            print("✅ Successfully uploaded MOBPY 2.0.0 to PyPI!")
+            print(f"✅ Successfully uploaded MOBPY {version} to PyPI!")
         else:
             print("⏸️  Production upload cancelled.")
     else:
@@ -113,14 +158,14 @@ def main():
         if direct_upload == 'y':
             print("\n📤 Uploading to PyPI...")
             run_command("twine upload dist/*")
-            print("✅ Successfully uploaded MOBPY 2.0.0 to PyPI!")
+            print(f"✅ Successfully uploaded MOBPY {version} to PyPI!")
         else:
             print("⏸️  Upload cancelled.")
     
     # Post-release checklist
     print("\n📝 Post-release checklist:")
-    print("   [ ] Create GitHub release tag: git tag v2.0.0")
-    print("   [ ] Push tag: git push origin v2.0.0")
+    print(f"   [ ] Create GitHub release tag: git tag v{version}")
+    print(f"   [ ] Push tag: git push origin v{version}")
     print("   [ ] Update GitHub release notes")
     print("   [ ] Announce on social media/forums")
     print("   [ ] Update documentation if needed")

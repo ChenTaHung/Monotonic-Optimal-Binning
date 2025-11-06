@@ -75,31 +75,6 @@ class MonotonicBinner:
                         These are reported separately in the summary.
         sort_kind: Pandas sorting algorithm for PAVA. None uses pandas default.
         merge_strategy: Strategy for selecting adjacent blocks to merge.
-        
-    Attributes:
-        resolved_sign_: Actual monotonicity direction used ('+' or '-').
-        
-    Examples:
-        >>> # Basic usage with binary target
-        >>> binner = MonotonicBinner(df, x='age', y='default')
-        >>> binner.fit()
-        >>> bins = binner.bins_()
-        >>> summary = binner.summary_()  # Includes WoE/IV
-        
-        >>> # Custom constraints
-        >>> constraints = BinningConstraints(
-        ...     max_bins=5,
-        ...     min_samples=0.05,  # 5% of data per bin
-        ...     min_positives=0.01  # 1% of positives per bin
-        ... )
-        >>> binner = MonotonicBinner(
-        ...     df, x='income', y='approved',
-        ...     constraints=constraints,
-        ...     exclude_values=[-999, -1]  # Special codes
-        ... )
-        
-        >>> # Transform new data
-        >>> new_bins = binner.transform(new_df['income'])
     """
     
     def __init__(
@@ -170,8 +145,124 @@ class MonotonicBinner:
         # Diagnostics
         self._fit_diagnostics: Dict[str, Any] = {}
     
+    def _build_full_summary(self) -> pd.DataFrame:
+        """Build the full summary DataFrame with WoE/IV for all bins.
+        
+        Includes numeric bins, missing bins, and excluded bins.
+        For binary targets, calculates WoE and IV using proper smoothing.
+        
+        Returns:
+            DataFrame with full binning summary.
+        """
+        if self._bins_df is None or self._parts is None:
+            raise RuntimeError("Internal error: bins or parts not available")
+        
+        config = get_config()
+        rows = []
+        
+        # Add numeric bins
+        for _, bin_row in self._bins_df.iterrows():
+            left = bin_row["left"]
+            right = bin_row["right"]
+            
+            # Format bucket label
+            label = f"[{_format_edge(left)}, {_format_edge(right)})"
+            if np.isneginf(left):
+                label = "(" + label[1:]
+            
+            rows.append({
+                "bucket": label,
+                "count": int(bin_row["n"]),
+                "sum": bin_row["sum"],
+                "mean": bin_row["mean"],
+                "std": bin_row["std"],
+                "min": bin_row["min"],
+                "max": bin_row["max"],
+            })
+        
+        # Add Missing row if present
+        if len(self._parts.missing) > 0:
+            y_missing = self._parts.missing[self.y]
+            rows.append({
+                "bucket": "Missing",
+                "count": len(y_missing),
+                "sum": y_missing.sum(),
+                "mean": y_missing.mean() if len(y_missing) > 0 else 0,
+                "std": y_missing.std() if len(y_missing) > 0 else 0,
+                "min": y_missing.min() if len(y_missing) > 0 else np.nan,
+                "max": y_missing.max() if len(y_missing) > 0 else np.nan,
+            })
+        
+        # Add Excluded rows if present
+        if len(self._parts.excluded) > 0:
+            # Group by excluded value
+            for val, group in self._parts.excluded.groupby(self.x):
+                y_group = group[self.y]
+                rows.append({
+                    "bucket": f"Excluded:{val}",
+                    "count": len(y_group),
+                    "sum": y_group.sum(),
+                    "mean": y_group.mean(),
+                    "std": y_group.std(),
+                    "min": y_group.min(),
+                    "max": y_group.max(),
+                })
+        
+        # Create summary DataFrame
+        summary = pd.DataFrame(rows)
+        
+        # Add percentage column
+        total_count = summary["count"].sum()
+        summary["count_pct"] = summary["count"] / total_count * 100
+        
+        # Add WoE/IV for binary targets
+        if self._is_binary_y:
+            # Calculate goods (y=0) and bads (y=1) for all bins
+            summary["bads"] = summary["sum"].astype(float)
+            summary["goods"] = summary["count"] - summary["bads"]
+            
+            # MODIFIED: Calculate WoE/IV for ALL bins including Missing and Excluded
+            # No longer filtering by numeric_mask
+            goods = summary["goods"].to_numpy()
+            bads = summary["bads"].to_numpy()
+            
+            # Calculate WoE/IV with smoothing for all bins
+            woe_components = woe_iv(
+                goods, bads, 
+                smoothing=0.5,  # Use smoothing to handle zero counts
+                return_components=True
+            )
+            
+            # Assign WoE and IV to all bins
+            summary["woe"] = woe_components["woe"]
+            summary["iv"] = woe_components["iv"]
+            
+            # Log total IV and breakdown by bin type
+            total_iv = summary["iv"].sum()
+            
+            # Calculate IV contributions by type
+            numeric_mask = ~summary["bucket"].str.contains("Missing|Excluded")
+            numeric_iv = summary.loc[numeric_mask, "iv"].sum()
+            missing_iv = summary.loc[summary["bucket"] == "Missing", "iv"].sum() if "Missing" in summary["bucket"].values else 0
+            excluded_iv = summary.loc[summary["bucket"].str.startswith("Excluded:"), "iv"].sum()
+            
+            logger.info(f"Total Information Value: {total_iv:.4f}")
+            logger.info(f"  Numeric bins IV: {numeric_iv:.4f}")
+            logger.info(f"  Missing bin IV: {missing_iv:.4f}")
+            logger.info(f"  Excluded bins IV: {excluded_iv:.4f}")
+            
+            # Drop intermediate columns
+            summary = summary.drop(columns=["bads", "goods"])
+        
+        # Reorder columns
+        base_cols = ["bucket", "count", "count_pct", "sum", "mean", "std", "min", "max"]
+        if self._is_binary_y:
+            base_cols.extend(["woe", "iv"])
+        
+        return summary[base_cols]
+    
     def fit(self) -> "MonotonicBinner":
-        """Fit the monotonic binner to the data.
+        """Run the complete binning pipeline.
         
         Main pipeline:
         1. Partition data by x values (clean/missing/excluded)
@@ -284,7 +375,7 @@ class MonotonicBinner:
             progress.update("Building bins DataFrame")
             self._bins_df = self._blocks_to_df(self._merged_blocks)
             
-            # Step 7: Build full summary
+            # Step 7: Build full summary with WoE/IV for all bins
             progress.update("Creating summary with WoE/IV")
             self._full_summary_df = self._build_full_summary()
             
@@ -303,6 +394,75 @@ class MonotonicBinner:
             logger.info("MOB fitting complete")
         
         return self
+    
+    def _blocks_to_df(self, blocks: List[Block]) -> pd.DataFrame:
+        """Convert blocks to bins DataFrame with proper edges.
+        
+        Args:
+            blocks: List of Block objects from merging.
+            
+        Returns:
+            DataFrame with bin information.
+        """
+        rows = []
+        for i, block in enumerate(blocks):
+            # Determine bin edges
+            if i == 0:
+                left = -np.inf
+            else:
+                # Use midpoint between this block's max and previous block's max
+                prev_right = blocks[i-1].right
+                curr_left = block.left
+                left = (prev_right + curr_left) / 2
+            
+            if i == len(blocks) - 1:
+                right = np.inf
+            else:
+                # Use midpoint between this block's max and next block's min
+                curr_right = block.right
+                next_left = blocks[i+1].left
+                right = (curr_right + next_left) / 2
+            
+            rows.append({
+                'left': left,
+                'right': right,
+                'n': block.n,
+                'sum': block.sum,
+                'mean': block.mean,
+                'std': block.std,
+                'min': block.ymin,
+                'max': block.ymax,
+            })
+        
+        return pd.DataFrame(rows)
+    
+    def _check_constraints_satisfied(self) -> Dict[str, bool]:
+        """Check which constraints were satisfied in the final binning.
+        
+        Returns:
+            Dict mapping constraint name to satisfaction status.
+        """
+        if self._merged_blocks is None:
+            return {}
+        
+        results = {}
+        
+        # Check max_bins
+        results['max_bins'] = len(self._merged_blocks) <= self.constraints.max_bins
+        
+        # Check min_bins
+        results['min_bins'] = len(self._merged_blocks) >= self.constraints.min_bins
+        
+        # Check min_samples per bin
+        min_n = min(block.n for block in self._merged_blocks)
+        results['min_samples'] = min_n >= self.constraints.abs_min_samples
+        
+        # Check min_positives per bin (if binary)
+        if self._is_binary_y:
+            min_pos = min(block.sum for block in self._merged_blocks)
+            results['min_positives'] = min_pos >= self.constraints.abs_min_positives
+        
+        return results
     
     def bins_(self) -> pd.DataFrame:
         """Get the fitted bins DataFrame.
@@ -339,6 +499,7 @@ class MonotonicBinner:
         
         Includes separate rows for Missing and Excluded values if present.
         For binary targets, adds Weight of Evidence and Information Value columns.
+        WoE and IV are now calculated for ALL bins including Missing and Excluded.
         
         Returns:
             DataFrame with columns:
@@ -349,8 +510,8 @@ class MonotonicBinner:
             - mean: Mean of y (event rate for binary)
             - std: Standard deviation
             - min/max: Range of y values
-            - woe: Weight of Evidence (binary only)
-            - iv: Information Value contribution (binary only)
+            - woe: Weight of Evidence (binary only, calculated for all bins)
+            - iv: Information Value contribution (binary only, calculated for all bins)
             
         Raises:
             NotFittedError: If called before fit().
@@ -358,6 +519,9 @@ class MonotonicBinner:
         Examples:
             >>> summary = binner.summary_()
             >>> print(f"Total IV: {summary['iv'].sum():.4f}")
+            >>> # Check IV contribution from missing values
+            >>> missing_iv = summary[summary['bucket'] == 'Missing']['iv'].sum()
+            >>> print(f"Missing bin IV: {missing_iv:.4f}")
         """
         if not self._is_fitted or self._full_summary_df is None:
             raise NotFittedError("Call fit() before accessing summary")
@@ -373,6 +537,7 @@ class MonotonicBinner:
         
         Maps each value to its corresponding bin using the fitted boundaries.
         Missing values map to "Missing", excluded values to their string repr.
+        For WoE assignment, Missing and Excluded values now get their calculated WoE values.
         
         Args:
             x_values: Series of values to transform.
@@ -383,89 +548,97 @@ class MonotonicBinner:
                 - "woe": Weight of Evidence (binary targets only)
                 
         Returns:
-            Series with assigned values. For "left"/"right", returns float.
-            For "interval", returns string labels. For "woe", returns float
-            (NaN for Missing/Excluded).
+            Series with assigned values.
             
         Raises:
             NotFittedError: If called before fit().
             ValueError: If assign='woe' but target is not binary.
             
         Examples:
-            >>> # Get bin labels
-            >>> bins = binner.transform(new_df['age'])
-            >>> 
-            >>> # Get WoE values for scoring
-            >>> woe_values = binner.transform(new_df['age'], assign='woe')
+            >>> # Transform to bin intervals
+            >>> bins = binner.transform(new_data['age'])
+            
+            >>> # Get WoE scores for scoring
+            >>> woe_scores = binner.transform(new_data['age'], assign='woe')
         """
-        if not self._is_fitted or self._bins_df is None:
-            raise NotFittedError("Call fit() before transforming")
+        if not self._is_fitted:
+            raise NotFittedError("Call fit() before transform")
         
         if assign == "woe" and not self._is_binary_y:
-            raise ValueError("assign='woe' requires binary target")
+            raise ValueError("WoE assignment requires binary target")
         
-        # Prepare bin edges and WoE mapping if needed
-        bins_df = self._bins_df
-        lefts = bins_df["left"].to_numpy()
-        rights = bins_df["right"].to_numpy()
+        # Start with all NaN
+        result = pd.Series(index=x_values.index, dtype=object)
         
-        if assign == "woe":
-            # Build WoE lookup from summary
-            summary = self._full_summary_df
-            # Extract numeric bins only
-            numeric_mask = ~summary["bucket"].str.contains("Missing|Excluded")
-            woe_map = dict(zip(
-                summary.loc[numeric_mask, "bucket"],
-                summary.loc[numeric_mask, "woe"]
-            ))
+        # Handle missing values
+        missing_mask = x_values.isna()
+        if missing_mask.any():
+            if assign == "interval":
+                result.loc[missing_mask] = "Missing"
+            elif assign == "woe" and self._is_binary_y:
+                # Get WoE for missing bin
+                missing_row = self._full_summary_df[self._full_summary_df["bucket"] == "Missing"]
+                if len(missing_row) > 0:
+                    result.loc[missing_mask] = missing_row["woe"].iloc[0]
+                else:
+                    result.loc[missing_mask] = 0.0
+            else:
+                result.loc[missing_mask] = np.nan
         
-        def _assign_one(val):
-            """Assign a single value to its bin."""
-            # Handle missing
-            if pd.isna(val):
-                if assign in ("left", "right", "woe"):
-                    return np.nan
-                return "Missing"
+        # Handle excluded values
+        if self.exclude_values is not None:
+            for exc_val in self.exclude_values:
+                exc_mask = x_values == exc_val
+                if exc_mask.any():
+                    if assign == "interval":
+                        result.loc[exc_mask] = f"Excluded:{exc_val}"
+                    elif assign == "woe" and self._is_binary_y:
+                        # Get WoE for this excluded value
+                        exc_row = self._full_summary_df[self._full_summary_df["bucket"] == f"Excluded:{exc_val}"]
+                        if len(exc_row) > 0:
+                            result.loc[exc_mask] = exc_row["woe"].iloc[0]
+                        else:
+                            result.loc[exc_mask] = 0.0
+                    else:
+                        result.loc[exc_mask] = np.nan
+        
+        # Handle regular values
+        exclude_list = list(self.exclude_values) if self.exclude_values is not None else []
+        clean_mask = ~missing_mask & ~x_values.isin(exclude_list)
+        if clean_mask.any():
+            clean_vals = x_values[clean_mask]
             
-            # Handle excluded
-            if self.exclude_values and val in self.exclude_values:
-                if assign in ("left", "right", "woe"):
-                    return np.nan
-                return f"Excluded:{val}"
+            if assign == "interval":
+                # Assign interval labels
+                for _, bin_row in self._bins_df.iterrows():
+                    bin_mask = (clean_vals >= bin_row['left']) & (clean_vals < bin_row['right'])
+                    if bin_mask.any():
+                        label = f"[{_format_edge(bin_row['left'])}, {_format_edge(bin_row['right'])})"
+                        if np.isneginf(bin_row['left']):
+                            label = "(" + label[1:]
+                        result.loc[clean_mask & bin_mask] = label
             
-            # Find the bin containing this value
-            # Since bins are [left, right), use searchsorted on rights
-            idx = np.searchsorted(rights, val, side="right")
-            idx = min(idx, len(rights) - 1)
+            elif assign in ["left", "right"]:
+                # Assign edge values
+                for _, bin_row in self._bins_df.iterrows():
+                    bin_mask = (clean_vals >= bin_row['left']) & (clean_vals < bin_row['right'])
+                    if bin_mask.any():
+                        result.loc[clean_mask & bin_mask] = bin_row[assign]
             
-            # Verify value is actually in this bin
-            if idx > 0 and val < lefts[idx]:
-                idx -= 1
-            
-            # Extract bin info
-            left_edge = lefts[idx]
-            right_edge = rights[idx]
-            
-            # Return requested assignment
-            if assign == "left":
-                return left_edge
-            elif assign == "right":
-                return right_edge
-            elif assign == "interval":
-                label = f"[{_format_edge(left_edge)}, {_format_edge(right_edge)})"
-                # Special case: first bin uses open left parenthesis
-                if np.isneginf(left_edge):
-                    label = "(" + label[1:]
-                return label
             elif assign == "woe":
-                # Build the interval label to look up WoE
-                label = f"[{_format_edge(left_edge)}, {_format_edge(right_edge)})"
-                if np.isneginf(left_edge):
-                    label = "(" + label[1:]
-                return woe_map.get(label, np.nan)
+                # Assign WoE values
+                for i, bin_row in self._bins_df.iterrows():
+                    bin_mask = (clean_vals >= bin_row['left']) & (clean_vals < bin_row['right'])
+                    if bin_mask.any():
+                        # Find corresponding WoE from summary
+                        label = f"[{_format_edge(bin_row['left'])}, {_format_edge(bin_row['right'])})"
+                        if np.isneginf(bin_row['left']):
+                            label = "(" + label[1:]
+                        summary_row = self._full_summary_df[self._full_summary_df["bucket"] == label]
+                        if len(summary_row) > 0:
+                            result.loc[clean_mask & bin_mask] = summary_row["woe"].iloc[0]
         
-        # Apply to all values
-        return x_values.apply(_assign_one)
+        return result
     
     def get_diagnostics(self) -> Dict[str, Any]:
         """Get detailed diagnostics from the fitting process.
@@ -539,214 +712,3 @@ class MonotonicBinner:
             raise NotFittedError("Call fit() before accessing PAVA groups")
         
         return self._pava.groups_.copy()
-    
-    # ---- Private methods ----
-    
-    def _blocks_to_df(self, blocks: List[Block]) -> pd.DataFrame:
-        """Convert blocks to bins DataFrame with proper edge handling.
-        
-        Creates half-open intervals where:
-        - First bin: (-inf, c₁)
-        - Middle bins: [cᵢ, cᵢ₊₁)
-        - Last bin: [cₙ, +inf)
-        
-        Args:
-            blocks: Merged blocks from the algorithm.
-            
-        Returns:
-            DataFrame with bin information.
-        """
-        if not blocks:
-            return pd.DataFrame(
-                columns=["left", "right", "n", "sum", "mean", "std", "min", "max"]
-            )
-        
-        rows = []
-        for i, block in enumerate(blocks):
-            # Determine edges
-            if i == 0:
-                # First bin starts at -inf
-                left = float("-inf")
-            else:
-                left = block.left
-            
-            if i == len(blocks) - 1:
-                # Last bin ends at +inf
-                right = float("inf")
-            else:
-                # Use next block's left as this bin's right
-                right = blocks[i + 1].left
-            
-            rows.append({
-                "left": left,
-                "right": right,
-                "n": block.n,
-                "sum": block.sum,
-                "mean": block.mean,
-                "std": block.std,
-                "min": block.ymin,
-                "max": block.ymax,
-            })
-        
-        return pd.DataFrame(rows)
-    
-    def _build_full_summary(self) -> pd.DataFrame:
-        """Build complete summary including Missing/Excluded rows.
-        
-        For binary targets, calculates WoE and IV using proper smoothing.
-        
-        Returns:
-            DataFrame with full binning summary.
-        """
-        if self._bins_df is None or self._parts is None:
-            raise RuntimeError("Internal error: bins or parts not available")
-        
-        config = get_config()
-        rows = []
-        
-        # Add numeric bins
-        for _, bin_row in self._bins_df.iterrows():
-            left = bin_row["left"]
-            right = bin_row["right"]
-            
-            # Format bucket label
-            label = f"[{_format_edge(left)}, {_format_edge(right)})"
-            if np.isneginf(left):
-                label = "(" + label[1:]
-            
-            rows.append({
-                "bucket": label,
-                "count": int(bin_row["n"]),
-                "sum": bin_row["sum"],
-                "mean": bin_row["mean"],
-                "std": bin_row["std"],
-                "min": bin_row["min"],
-                "max": bin_row["max"],
-            })
-        
-        # Add Missing row if present
-        if len(self._parts.missing) > 0:
-            y_missing = self._parts.missing[self.y]
-            rows.append({
-                "bucket": "Missing",
-                "count": len(y_missing),
-                "sum": y_missing.sum(),
-                "mean": y_missing.mean() if len(y_missing) > 0 else 0,
-                "std": y_missing.std() if len(y_missing) > 0 else 0,
-                "min": y_missing.min() if len(y_missing) > 0 else np.nan,
-                "max": y_missing.max() if len(y_missing) > 0 else np.nan,
-            })
-        
-        # Add Excluded rows if present
-        if len(self._parts.excluded) > 0:
-            # Group by excluded value
-            for val, group in self._parts.excluded.groupby(self.x):
-                y_group = group[self.y]
-                rows.append({
-                    "bucket": f"Excluded:{val}",
-                    "count": len(y_group),
-                    "sum": y_group.sum(),
-                    "mean": y_group.mean(),
-                    "std": y_group.std(),
-                    "min": y_group.min(),
-                    "max": y_group.max(),
-                })
-        
-        # Create summary DataFrame
-        summary = pd.DataFrame(rows)
-        
-        # Add percentage column
-        total_count = summary["count"].sum()
-        summary["count_pct"] = summary["count"] / total_count * 100
-        
-        # Add WoE/IV for binary targets
-        if self._is_binary_y:
-            # Calculate goods (y=0) and bads (y=1)
-            summary["bads"] = summary["sum"].astype(float)
-            summary["goods"] = summary["count"] - summary["bads"]
-            
-            # Get WoE/IV for numeric bins only
-            numeric_mask = ~summary["bucket"].str.contains("Missing|Excluded")
-            numeric_indices = summary.index[numeric_mask]
-            
-            if len(numeric_indices) > 0:
-                goods = summary.loc[numeric_indices, "goods"].to_numpy()
-                bads = summary.loc[numeric_indices, "bads"].to_numpy()
-                
-                # Calculate WoE/IV with smoothing
-                woe_components = woe_iv(
-                    goods, bads, 
-                    smoothing=0.5,
-                    return_components=True
-                )
-                
-                # Assign to numeric bins
-                summary.loc[numeric_indices, "woe"] = woe_components["woe"]
-                summary.loc[numeric_indices, "iv"] = woe_components["iv"]
-                
-                # Non-numeric bins get NaN
-                summary.loc[~numeric_mask, "woe"] = np.nan
-                summary.loc[~numeric_mask, "iv"] = 0.0
-            else:
-                summary["woe"] = np.nan
-                summary["iv"] = 0.0
-            
-            # Log total IV
-            total_iv = summary["iv"].sum()
-            logger.info(f"Total Information Value: {total_iv:.4f}")
-            
-            # Drop intermediate columns
-            summary = summary.drop(columns=["bads", "goods"])
-        
-        # Reorder columns
-        base_cols = ["bucket", "count", "count_pct", "sum", "mean", "std", "min", "max"]
-        if self._is_binary_y:
-            base_cols.extend(["woe", "iv"])
-        
-        return summary[base_cols]
-    
-    def _check_constraints_satisfied(self) -> Dict[str, bool]:
-        """Check which constraints were satisfied in the final binning.
-        
-        Returns:
-            Dict mapping constraint name to satisfaction status.
-        """
-        if not self._merged_blocks:
-            return {}
-        
-        constraints = self.constraints
-        blocks = self._merged_blocks
-        
-        satisfied = {
-            "max_bins": len(blocks) <= constraints.max_bins,
-            "min_bins": len(blocks) >= constraints.min_bins,
-        }
-        
-        # Check sample constraints
-        if constraints.abs_min_samples > 0:
-            satisfied["min_samples"] = all(
-                b.n >= constraints.abs_min_samples for b in blocks
-            )
-        
-        if constraints.abs_max_samples is not None:
-            satisfied["max_samples"] = all(
-                b.n <= constraints.abs_max_samples for b in blocks
-            )
-        
-        # Check positives constraint (binary only)
-        if self._is_binary_y and constraints.abs_min_positives > 0:
-            satisfied["min_positives"] = all(
-                b.sum >= constraints.abs_min_positives for b in blocks
-            )
-        
-        return satisfied
-    
-    def __repr__(self) -> str:
-        """String representation showing configuration and fit status."""
-        status = "fitted" if self._is_fitted else "not fitted"
-        n_bins = len(self._merged_blocks) if self._merged_blocks else "N/A"
-        
-        return (
-            f"MonotonicBinner(x='{self.x}', y='{self.y}', "
-            f"sign='{self.sign}', status={status}, n_bins={n_bins})"
-        )
