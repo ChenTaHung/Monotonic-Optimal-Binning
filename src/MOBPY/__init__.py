@@ -11,7 +11,7 @@ Basic Usage:
     >>> summary = binner.summary_()
 """
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 # Core public API - everything users need at top level
 from MOBPY.binning.mob import MonotonicBinner

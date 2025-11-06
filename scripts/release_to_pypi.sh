@@ -1,18 +1,46 @@
 #!/bin/bash
 
 # MOBPY Release Script for PyPI
-# Version 2.0.0
+# Dynamically reads version from pyproject.toml
 
 set -e  # Exit on error
 
-echo "🚀 MOBPY Release Script v2.0.0"
+# Extract version from pyproject.toml
+VERSION=$(grep -oP 'version\s*=\s*"\K[^"]+' pyproject.toml || echo "unknown")
+
+echo "🚀 MOBPY Release Script v${VERSION}"
 echo "================================"
+
+# Check we're in the right directory
+if [ ! -f "pyproject.toml" ]; then
+    echo "❌ Must run from project root directory"
+    exit 1
+fi
 
 # Check Python version
 echo "📌 Checking Python version..."
 python --version
 
+# Verify version consistency
+echo ""
+echo "🔍 Verifying version consistency..."
+echo "   pyproject.toml: ${VERSION}"
+
+# Check __init__.py version
+if [ -f "src/MOBPY/__init__.py" ]; then
+    INIT_VERSION=$(grep -oP '__version__\s*=\s*"\K[^"]+' src/MOBPY/__init__.py || echo "unknown")
+    echo "   __init__.py:    ${INIT_VERSION}"
+    
+    if [ "$VERSION" != "$INIT_VERSION" ]; then
+        echo "❌ Version mismatch! Fix __init__.py to match ${VERSION}"
+        exit 1
+    fi
+fi
+
+echo "   ✅ Version consistency check passed"
+
 # Clean previous builds
+echo ""
 echo "🧹 Cleaning previous builds..."
 rm -rf dist/ build/ src/*.egg-info
 
@@ -43,7 +71,7 @@ ls -la dist/
 echo ""
 echo "⚠️  Ready to upload to PyPI?"
 echo "   Package: MOBPY"
-echo "   Version: 2.0.0"
+echo "   Version: ${VERSION}"
 echo ""
 read -p "Upload to TestPyPI first? (recommended) [y/N]: " test_upload
 
@@ -52,14 +80,14 @@ if [[ $test_upload =~ ^[Yy]$ ]]; then
     twine upload --repository testpypi dist/*
     echo ""
     echo "✅ Uploaded to TestPyPI!"
-    echo "   Test install with: pip install --index-url https://test.pypi.org/simple/ MOBPY"
+    echo "   Test install with: pip install --index-url https://test.pypi.org/simple/ MOBPY==${VERSION}"
     echo ""
     read -p "Continue to production PyPI? [y/N]: " prod_upload
     
     if [[ $prod_upload =~ ^[Yy]$ ]]; then
         echo "📤 Uploading to PyPI..."
         twine upload dist/*
-        echo "✅ Successfully uploaded MOBPY 2.0.0 to PyPI!"
+        echo "✅ Successfully uploaded MOBPY ${VERSION} to PyPI!"
     else
         echo "⏸️  Production upload cancelled."
     fi
@@ -69,7 +97,7 @@ else
     if [[ $direct_upload =~ ^[Yy]$ ]]; then
         echo "📤 Uploading to PyPI..."
         twine upload dist/*
-        echo "✅ Successfully uploaded MOBPY 2.0.0 to PyPI!"
+        echo "✅ Successfully uploaded MOBPY ${VERSION} to PyPI!"
     else
         echo "⏸️  Upload cancelled."
     fi
@@ -77,8 +105,11 @@ fi
 
 echo ""
 echo "📝 Post-release checklist:"
-echo "   [ ] Create GitHub release tag: git tag v2.0.0"
-echo "   [ ] Push tag: git push origin v2.0.0"
+echo "   [ ] Create GitHub release tag: git tag v${VERSION}"
+echo "   [ ] Push tag: git push origin v${VERSION}"
 echo "   [ ] Update GitHub release notes"
 echo "   [ ] Announce on social media/forums"
 echo "   [ ] Update documentation if needed"
+
+echo ""
+echo "✨ Release process complete!"

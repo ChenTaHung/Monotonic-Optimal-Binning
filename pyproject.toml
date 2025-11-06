@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "MOBPY"
-version = "2.0.0"
+version = "2.1.0"
 description = "Monotone optimal binning (MOB) via PAVA with constraints, plus plotting utilities."
-readme = "README.md"
+readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.9"
-license = "MIT"
+license = {text = "MIT"}
 authors = [
     { name = "Ta-Hung (Denny) Chen", email = "denny20700@gmail.com" }
 ]
@@ -43,6 +43,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest>=8.0",
+    "pytest-mock>=3.15",
     "hypothesis>=6.100",
     "pytest-cov>=4.0"
 ]
