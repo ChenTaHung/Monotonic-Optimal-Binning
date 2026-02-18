@@ -51,6 +51,8 @@ class Block:
         mean: Sample mean of y values.
         var: Unbiased sample variance.
         std: Sample standard deviation.
+        positives: Count of positive samples (for binary y, equals sum).
+        negatives: Count of negative samples (for binary y, equals n - sum).
     """
     
     left: float
@@ -114,6 +116,29 @@ class Block:
             return 0.0
         return self.std / abs(self.mean)
     
+    # NEW: Properties for binary target class counts
+    @property
+    def positives(self) -> float:
+        """Count of positive samples (y=1) for binary targets.
+        
+        For binary targets where y ∈ {0, 1}, sum equals the count of 1s.
+        
+        Returns:
+            float: Number of positive samples (equals self.sum).
+        """
+        return self.sum
+    
+    @property
+    def negatives(self) -> float:
+        """Count of negative samples (y=0) for binary targets.
+        
+        For binary targets where y ∈ {0, 1}, negatives = n - sum.
+        
+        Returns:
+            float: Number of negative samples.
+        """
+        return self.n - self.sum
+    
     def merge_with(self, other: "Block") -> "Block":
         """Merge with another block, pooling statistics.
         
@@ -165,7 +190,9 @@ class Block:
             'mean': float(self.mean),
             'var': float(self.var),
             'std': float(self.std),
-            'cv': float(self.cv)
+            'cv': float(self.cv),
+            'positives': float(self.positives),  # NEW: include in dict export
+            'negatives': float(self.negatives)   # NEW: include in dict export
         }
     
     def __repr__(self) -> str:
@@ -391,14 +418,24 @@ class MergeScorer:
                 violation_ratio = merged_n / constraints.abs_max_samples
                 score *= max(0.1, 1.0 / violation_ratio)
         
-        # 4. Minimum positives (binary only)
+        # 4. Minimum positives (binary only) - encourage merging low-positive bins
         if self.is_binary_y and constraints.abs_min_positives > 0:
-            a_positives = a.sum
-            b_positives = b.sum
+            a_positives = a.positives
+            b_positives = b.positives
             
             if a_positives < constraints.abs_min_positives:
-                score *= 1.4
+                score *= 1.4  # 40% bonus for merging low-positive bin
             if b_positives < constraints.abs_min_positives:
+                score *= 1.4
+        
+        # 5. NEW: Minimum negatives (binary only) - encourage merging low-negative bins
+        if self.is_binary_y and constraints.abs_min_negatives > 0:
+            a_negatives = a.negatives
+            b_negatives = b.negatives
+            
+            if a_negatives < constraints.abs_min_negatives:
+                score *= 1.4  # 40% bonus for merging low-negative bin
+            if b_negatives < constraints.abs_min_negatives:
                 score *= 1.4
         
         return score
@@ -416,9 +453,10 @@ def merge_adjacent(
     """Merge adjacent blocks using statistical tests and constraints.
     
     Main merging algorithm that:
-    1. Greedily merges best-scoring adjacent pairs
+    1. Greedily merges best-scoring adjacent pairs (Phase 1)
     2. Respects max_bins constraint
-    3. Enforces min_samples through a final sweep
+    3. Enforces min_samples through a sweep (Phase 2)
+    4. Enforces min_positives and min_negatives for binary targets (Phase 3)
     
     Args:
         blocks: Input blocks from PAVA (as Block objects or dicts).
@@ -471,12 +509,18 @@ def merge_adjacent(
             current, constraints, scorer, history
         )
     
+    # Phase 3: NEW - Enforce minimum class counts (positives and negatives) for binary targets
+    if is_binary_y and (constraints.abs_min_positives > 0 or constraints.abs_min_negatives > 0):
+        current = _enforce_min_class_counts(
+            current, constraints, scorer, history
+        )
+    
     # Validate result
     if len(current) == 0:
         raise FittingError("Merging produced zero blocks")
     
-    # Final validation
-    _validate_merge_result(current, constraints)
+    # Final validation (includes warnings for unsatisfied constraints)
+    _validate_merge_result(current, constraints, is_binary_y)
     
     logger.info(f"Merge complete: {len(blocks_typed)} -> {len(current)} blocks")
     
@@ -557,16 +601,8 @@ def _statistical_merge_phase(
     
     if iteration >= max_iterations:
         warnings.warn(
-            f"Min-samples enforcement reached max iterations ({max_iterations})",
+            f"Statistical merge phase reached max iterations ({max_iterations})",
             UserWarning
-        )
-    
-    # Log result
-    still_undersized = sum(1 for b in current if b.n < constraints.abs_min_samples)
-    if still_undersized > 0:
-        logger.warning(
-            f"Could not satisfy min_samples for {still_undersized} bins "
-            f"(reached min_bins={constraints.min_bins} limit)"
         )
     
     return current
@@ -638,12 +674,17 @@ def _snapshot(blocks: Sequence[Block]) -> List[Dict]:
     return [b.as_dict() for b in blocks]
 
 
-def _validate_merge_result(blocks: List[Block], constraints: BinningConstraints) -> None:
-    """Validate that merge result satisfies constraints.
+def _validate_merge_result(
+    blocks: List[Block], 
+    constraints: BinningConstraints,
+    is_binary_y: bool = False  # NEW: Added parameter
+) -> None:
+    """Validate that merge result satisfies constraints and warn on violations.
     
     Args:
         blocks: Final blocks.
         constraints: Binning constraints.
+        is_binary_y: Whether target is binary (for class count validation).
         
     Raises:
         FittingError: If critical constraints are violated.
@@ -669,12 +710,22 @@ def _validate_merge_result(blocks: List[Block], constraints: BinningConstraints)
             )
     
     # Report on constraint satisfaction
+    # Check min_samples
     undersized = [b for b in blocks if b.n < constraints.abs_min_samples]
     if undersized and n_blocks > constraints.min_bins:
         logger.warning(
             f"{len(undersized)} blocks have fewer than {constraints.abs_min_samples} samples"
         )
+    elif undersized:
+        # Hit min_bins floor, still have violations
+        warnings.warn(
+            f"{len(undersized)} bins have fewer than min_samples={constraints.abs_min_samples}, "
+            f"but cannot merge further without violating min_bins={constraints.min_bins}. "
+            f"Consider relaxing min_samples or min_bins constraint.",
+            UserWarning
+        )
     
+    # Check max_samples
     oversized = [
         b for b in blocks 
         if constraints.abs_max_samples and b.n > constraints.abs_max_samples
@@ -683,6 +734,44 @@ def _validate_merge_result(blocks: List[Block], constraints: BinningConstraints)
         logger.warning(
             f"{len(oversized)} blocks exceed max_samples={constraints.abs_max_samples}"
         )
+    
+    # NEW: Check min_positives (binary targets only)
+    if is_binary_y and constraints.abs_min_positives > 0:
+        low_positives = [b for b in blocks if b.positives < constraints.abs_min_positives]
+        if low_positives:
+            if n_blocks > constraints.min_bins:
+                logger.warning(
+                    f"{len(low_positives)} bins have fewer than "
+                    f"min_positives={constraints.abs_min_positives}"
+                )
+            else:
+                warnings.warn(
+                    f"{len(low_positives)} bins have fewer than "
+                    f"min_positives={constraints.abs_min_positives}, "
+                    f"but cannot merge further without violating min_bins={constraints.min_bins}. "
+                    f"WoE calculations may be unstable. "
+                    f"Consider relaxing min_positives or min_bins constraint.",
+                    UserWarning
+                )
+    
+    # NEW: Check min_negatives (binary targets only)
+    if is_binary_y and constraints.abs_min_negatives > 0:
+        low_negatives = [b for b in blocks if b.negatives < constraints.abs_min_negatives]
+        if low_negatives:
+            if n_blocks > constraints.min_bins:
+                logger.warning(
+                    f"{len(low_negatives)} bins have fewer than "
+                    f"min_negatives={constraints.abs_min_negatives}"
+                )
+            else:
+                warnings.warn(
+                    f"{len(low_negatives)} bins have fewer than "
+                    f"min_negatives={constraints.abs_min_negatives}, "
+                    f"but cannot merge further without violating min_bins={constraints.min_bins}. "
+                    f"WoE calculations may be unstable. "
+                    f"Consider relaxing min_negatives or min_bins constraint.",
+                    UserWarning
+                )
 
 
 # Helper functions for type conversion
@@ -876,19 +965,6 @@ def get_merge_summary(
     }
 
 
-# Public API exports
-__all__ = [
-    'Block',
-    'MergeStrategy',
-    'MergeScorer',
-    'merge_adjacent',
-    'blocks_from_dicts',
-    'as_blocks',
-    'validate_monotonicity',
-    'get_merge_summary'
-]
-
-
 def _enforce_min_samples(
     blocks: List[Block],
     constraints: BinningConstraints,
@@ -917,7 +993,7 @@ def _enforce_min_samples(
     iteration = 0
     
     while iteration < max_iterations:
-        # Stop if we hit min_bins
+        # Stop if we hit min_bins floor
         if len(current) <= max(1, constraints.min_bins):
             break
         
@@ -941,7 +1017,7 @@ def _enforce_min_samples(
             # Last block - can only merge left
             merge_idx = idx - 1
         else:
-            # Middle block - choose better neighbor
+            # Middle block - choose better neighbor based on score
             left_score = scorer.score_pair(current[idx-1], current[idx])
             right_score = scorer.score_pair(current[idx], current[idx+1])
             merge_idx = idx if right_score >= left_score else idx - 1
@@ -958,10 +1034,187 @@ def _enforce_min_samples(
         )
         
         iteration += 1
-        if iteration >= max_iterations:
-            warnings.warn(
-                f"Merge phase reached maximum iterations ({max_iterations})",
-                UserWarning
-            )
+    
+    if iteration >= max_iterations:
+        warnings.warn(
+            f"Min-samples enforcement reached max iterations ({max_iterations})",
+            UserWarning
+        )
     
     return current
+
+
+def _enforce_min_class_counts(
+    blocks: List[Block],
+    constraints: BinningConstraints,
+    scorer: MergeScorer,
+    history: Optional[List[List[Dict]]]
+) -> List[Block]:
+    """Phase 3: Enforce minimum positives and negatives per bin (binary targets).
+    
+    This unified function handles both min_positives and min_negatives constraints
+    in a single pass. It iteratively merges bins that violate either constraint
+    until all bins satisfy both constraints or the min_bins floor is reached.
+    
+    For WoE calculations, each bin needs sufficient counts of both classes to
+    avoid division by zero or log(0) issues.
+    
+    Args:
+        blocks: Current blocks.
+        constraints: Binning constraints (must have abs_min_positives and/or 
+                     abs_min_negatives resolved).
+        scorer: Merge scorer for selecting best merge candidate.
+        history: Optional history list for tracking merge operations.
+        
+    Returns:
+        List[Block]: Blocks with class count constraints enforced where possible.
+        
+    Note:
+        This function respects min_bins as the hard floor. If constraints cannot
+        be satisfied without going below min_bins, warnings will be raised by
+        _validate_merge_result().
+    """
+    current = list(blocks)
+    
+    min_pos = constraints.abs_min_positives
+    min_neg = constraints.abs_min_negatives
+    
+    # Skip if no class count constraints
+    if min_pos <= 0 and min_neg <= 0:
+        return current
+    
+    logger.debug(
+        f"Enforcing min_positives={min_pos}, min_negatives={min_neg}"
+    )
+    
+    max_iterations = len(blocks) * 2  # Prevent infinite loops
+    iteration = 0
+    
+    while iteration < max_iterations:
+        # Stop if we hit min_bins floor
+        if len(current) <= max(1, constraints.min_bins):
+            logger.debug(
+                f"Reached min_bins={constraints.min_bins} floor, "
+                f"stopping class count enforcement"
+            )
+            break
+        
+        # Find bins violating either constraint
+        # We check both constraints and process the first violating bin
+        violating_indices = []
+        for i, b in enumerate(current):
+            violates_positives = min_pos > 0 and b.positives < min_pos
+            violates_negatives = min_neg > 0 and b.negatives < min_neg
+            
+            if violates_positives or violates_negatives:
+                # Track which constraint(s) are violated for logging
+                violations = []
+                if violates_positives:
+                    violations.append(f"pos={b.positives}<{min_pos}")
+                if violates_negatives:
+                    violations.append(f"neg={b.negatives}<{min_neg}")
+                violating_indices.append((i, violations))
+        
+        if not violating_indices:
+            logger.debug("All bins satisfy class count constraints")
+            break
+        
+        # Process first violating bin
+        idx, violations = violating_indices[0]
+        
+        logger.debug(
+            f"Bin {idx} violates constraints: {', '.join(violations)}"
+        )
+        
+        # Determine merge direction based on best score
+        if idx == 0:
+            # First block - can only merge right
+            merge_idx = 0
+        elif idx == len(current) - 1:
+            # Last block - can only merge left
+            merge_idx = idx - 1
+        else:
+            # Middle block - choose neighbor that better improves constraint satisfaction
+            # Use scorer to determine statistically similar neighbors, but also consider
+            # which merge better addresses the constraint violation
+            left_score = scorer.score_pair(current[idx-1], current[idx])
+            right_score = scorer.score_pair(current[idx], current[idx+1])
+            
+            # Bonus for merging with neighbor that has more of the needed class
+            left_neighbor = current[idx - 1]
+            right_neighbor = current[idx + 1]
+            current_block = current[idx]
+            
+            # Calculate how much each merge would help
+            left_positives_after = current_block.positives + left_neighbor.positives
+            left_negatives_after = current_block.negatives + left_neighbor.negatives
+            right_positives_after = current_block.positives + right_neighbor.positives
+            right_negatives_after = current_block.negatives + right_neighbor.negatives
+            
+            # Check if merges would satisfy constraints
+            left_satisfies_pos = min_pos <= 0 or left_positives_after >= min_pos
+            left_satisfies_neg = min_neg <= 0 or left_negatives_after >= min_neg
+            right_satisfies_pos = min_pos <= 0 or right_positives_after >= min_pos
+            right_satisfies_neg = min_neg <= 0 or right_negatives_after >= min_neg
+            
+            left_satisfies_both = left_satisfies_pos and left_satisfies_neg
+            right_satisfies_both = right_satisfies_pos and right_satisfies_neg
+            
+            # Prefer merge that satisfies both constraints
+            if left_satisfies_both and not right_satisfies_both:
+                merge_idx = idx - 1
+            elif right_satisfies_both and not left_satisfies_both:
+                merge_idx = idx
+            else:
+                # Neither or both satisfy, use statistical score
+                merge_idx = idx if right_score >= left_score else idx - 1
+        
+        # Perform merge
+        current = _merge_at(current, merge_idx)
+        
+        if history is not None:
+            history.append(_snapshot(current))
+        
+        logger.debug(
+            f"Class-count merge: blocks {merge_idx},{merge_idx+1}, "
+            f"{len(current)} blocks remain"
+        )
+        
+        iteration += 1
+    
+    if iteration >= max_iterations:
+        warnings.warn(
+            f"Class count enforcement reached max iterations ({max_iterations})",
+            UserWarning
+        )
+    
+    # Log final state
+    still_violating_pos = sum(
+        1 for b in current if min_pos > 0 and b.positives < min_pos
+    )
+    still_violating_neg = sum(
+        1 for b in current if min_neg > 0 and b.negatives < min_neg
+    )
+    
+    if still_violating_pos > 0 or still_violating_neg > 0:
+        logger.warning(
+            f"Could not satisfy all class count constraints: "
+            f"{still_violating_pos} bins below min_positives, "
+            f"{still_violating_neg} bins below min_negatives "
+            f"(reached min_bins={constraints.min_bins} floor)"
+        )
+    
+    return current
+
+
+# Public API exports
+__all__ = [
+    'Block',
+    'MergeStrategy',
+    'MergeScorer',
+    'merge_adjacent',
+    'blocks_from_dicts',
+    'as_blocks',
+    'validate_monotonicity',
+    'get_merge_summary'
+]

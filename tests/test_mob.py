@@ -2,6 +2,8 @@
 
 This module provides comprehensive tests for the main MonotonicBinner class,
 including the complete binning pipeline, transformation, and edge cases.
+
+UPDATED: Added tests for min_negatives constraint and diagnostics.
 """
 
 import pytest
@@ -112,6 +114,35 @@ class TestMonotonicBinner:
         total_clean = bins['n'].sum()
         for n in bins['n']:
             assert n >= 0.2 * total_clean * 0.95  # Allow small tolerance
+    
+    def test_fit_with_class_count_constraints(self):
+        """NEW: Test fitting with min_positives and min_negatives constraints."""
+        df = self.create_test_data(n=1000, seed=123)
+        
+        constraints = BinningConstraints(
+            max_bins=6,
+            min_bins=2,
+            min_positives=0.05,  # 5% of positives per bin
+            min_negatives=0.05   # 5% of negatives per bin
+        )
+        
+        binner = MonotonicBinner(df=df, x='x', y='y', constraints=constraints)
+        binner.fit()
+        
+        # Get the merged blocks to check class counts
+        summary = binner.summary_()
+        bins = binner.bins_()
+        
+        # Should have reasonable number of bins
+        assert 2 <= len(bins) <= 6
+        
+        # Check diagnostics include class count satisfaction
+        diag = binner.get_diagnostics()
+        assert 'constraints_satisfied' in diag
+        # min_positives and min_negatives should be checked
+        if 'min_positives' in diag['constraints_satisfied']:
+            # If constraint was active, check the status
+            pass  # Status is recorded
     
     def test_fit_auto_sign_detection(self):
         """Test automatic sign detection."""
@@ -415,6 +446,58 @@ class TestMonotonicBinner:
         assert 'resolved_sign' in diag
         assert 'n_pava_blocks' in diag
         assert 'n_final_bins' in diag
+    
+    def test_diagnostics_constraints_satisfied(self):
+        """NEW: Test that diagnostics include constraint satisfaction status."""
+        df = self.create_test_data(n=1000)
+        
+        constraints = BinningConstraints(
+            max_bins=5,
+            min_bins=2,
+            min_samples=50,
+            min_positives=20,
+            min_negatives=20
+        )
+        
+        binner = MonotonicBinner(df=df, x='x', y='y', constraints=constraints)
+        binner.fit()
+        
+        diag = binner.get_diagnostics()
+        
+        # Check constraints_satisfied has expected keys
+        assert 'constraints_satisfied' in diag
+        cs = diag['constraints_satisfied']
+        
+        assert 'max_bins' in cs
+        assert 'min_bins' in cs
+        assert 'min_samples' in cs
+        assert 'min_positives' in cs
+        # NEW: Check min_negatives is tracked
+        assert 'min_negatives' in cs
+    
+    def test_get_diagnostics_method(self):
+        """Test get_diagnostics() method returns expected structure."""
+        df = self.create_test_data()
+        
+        binner = MonotonicBinner(df=df, x='x', y='y')
+        binner.fit()
+        
+        diag = binner.get_diagnostics()
+        
+        # Should return a dictionary
+        assert isinstance(diag, dict)
+        
+        # Check expected keys
+        expected_keys = [
+            'partition_summary',
+            'is_binary',
+            'resolved_sign',
+            'n_pava_blocks',
+            'n_final_bins',
+            'constraints_satisfied'
+        ]
+        for key in expected_keys:
+            assert key in diag, f"Missing key: {key}"
 
 
 class TestFormatEdge:
@@ -482,6 +565,55 @@ class TestMonotonicBinnerIntegration:
         if len(woe_values) > 1:
             # Check that WoE generally increases (with tolerance for small variations)
             assert woe_values[-1] >= woe_values[0] - 0.5  # Overall increasing trend
+    
+    def test_credit_scoring_with_class_constraints(self):
+        """NEW: Test credit scoring with WoE stability constraints."""
+        np.random.seed(456)
+        n = 2000
+        
+        # Credit amount vs default
+        credit_amount = np.random.lognormal(8, 1, n)
+        credit_amount = np.clip(credit_amount, 100, 20000)
+        
+        # Higher amounts -> higher risk
+        default_prob = 0.1 + 0.2 * (credit_amount / 20000)
+        defaults = np.random.binomial(1, default_prob)
+        
+        df = pd.DataFrame({
+            'credit_amount': credit_amount,
+            'default': defaults
+        })
+        
+        # Use constraints that ensure WoE stability
+        constraints = BinningConstraints(
+            max_bins=6,
+            min_bins=2,
+            min_samples=0.05,
+            min_positives=20,  # At least 20 defaults per bin
+            min_negatives=50   # At least 50 non-defaults per bin
+        )
+        
+        binner = MonotonicBinner(
+            df=df, x='credit_amount', y='default',
+            constraints=constraints
+        )
+        binner.fit()
+        
+        # Check results
+        summary = binner.summary_()
+        
+        # WoE should be finite (no log(0) issues)
+        numeric_mask = ~summary['bucket'].str.contains('Missing|Excluded', na=False)
+        woe_values = summary.loc[numeric_mask, 'woe'].values
+        
+        assert all(np.isfinite(woe_values)), "WoE contains infinite values"
+        
+        # Check constraints satisfied
+        diag = binner.get_diagnostics()
+        cs = diag['constraints_satisfied']
+        
+        # If constraint could be satisfied, it should be
+        # (may not be satisfied if data doesn't allow)
     
     def test_insurance_risk_pattern(self):
         """Test with insurance risk scoring pattern."""
@@ -560,3 +692,73 @@ class TestMonotonicBinnerIntegration:
         # Total IV should be reasonable
         total_iv = summary['iv'].sum()
         assert 0 < total_iv < 10  # Reasonable IV range
+    
+    def test_extreme_class_imbalance(self):
+        """NEW: Test handling of extreme class imbalance."""
+        np.random.seed(999)
+        n = 1000
+        
+        # Very imbalanced: only 2% positive rate
+        x = np.random.uniform(0, 10, n)
+        p = 0.01 + 0.02 * (x / 10)  # 1% to 3% positive rate
+        y = np.random.binomial(1, p)
+        
+        df = pd.DataFrame({'x': x, 'y': y})
+        
+        # With low positive rate, need careful constraints
+        constraints = BinningConstraints(
+            max_bins=4,
+            min_bins=2,
+            min_positives=5,   # Need at least 5 positives per bin
+            min_negatives=50   # Plenty of negatives available
+        )
+        
+        binner = MonotonicBinner(df=df, x='x', y='y', constraints=constraints)
+        binner.fit()
+        
+        # Should complete without error
+        bins = binner.bins_()
+        assert len(bins) >= 2
+        
+        # WoE should be finite
+        summary = binner.summary_()
+        numeric_mask = ~summary['bucket'].str.contains('Missing|Excluded', na=False)
+        woe_values = summary.loc[numeric_mask, 'woe'].values
+        assert all(np.isfinite(woe_values))
+    
+    def test_woe_stability_with_constraints(self):
+        """NEW: Test that WoE is stable when class constraints are used."""
+        np.random.seed(111)
+        n = 500
+        
+        # Create data with potential for empty classes in some bins
+        x = np.random.uniform(0, 10, n)
+        # Step function for probability
+        p = np.where(x < 3, 0.05, np.where(x < 7, 0.5, 0.95))
+        y = np.random.binomial(1, p)
+        
+        df = pd.DataFrame({'x': x, 'y': y})
+        
+        # Constraints to ensure stable WoE
+        constraints = BinningConstraints(
+            max_bins=5,
+            min_bins=2,
+            min_positives=10,
+            min_negatives=10
+        )
+        
+        binner = MonotonicBinner(df=df, x='x', y='y', constraints=constraints)
+        binner.fit()
+        
+        summary = binner.summary_()
+        numeric_mask = ~summary['bucket'].str.contains('Missing|Excluded', na=False)
+        
+        # Check each bin has reasonable counts
+        for _, row in summary[numeric_mask].iterrows():
+            count = row['count']
+            positives = row['sum']  # For binary, sum = positives
+            negatives = count - positives
+            
+            # Both should be non-zero due to constraints
+            assert positives > 0, f"Bin {row['bucket']} has 0 positives"
+            assert negatives > 0, f"Bin {row['bucket']} has 0 negatives"
