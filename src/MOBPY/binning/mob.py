@@ -437,11 +437,7 @@ class MonotonicBinner:
         return pd.DataFrame(rows)
     
     def _check_constraints_satisfied(self) -> Dict[str, bool]:
-        """Check which constraints were satisfied in the final binning.
-        
-        Returns:
-            Dict mapping constraint name to satisfaction status.
-        """
+        """Check which constraints were satisfied in the final binning."""
         if self._merged_blocks is None:
             return {}
         
@@ -457,10 +453,14 @@ class MonotonicBinner:
         min_n = min(block.n for block in self._merged_blocks)
         results['min_samples'] = min_n >= self.constraints.abs_min_samples
         
-        # Check min_positives per bin (if binary)
+        # Check min_positives and min_negatives per bin (if binary)
         if self._is_binary_y:
             min_pos = min(block.sum for block in self._merged_blocks)
             results['min_positives'] = min_pos >= self.constraints.abs_min_positives
+            
+            # NEW: Check min_negatives
+            min_neg = min(block.n - block.sum for block in self._merged_blocks)
+            results['min_negatives'] = min_neg >= self.constraints.abs_min_negatives
         
         return results
     
