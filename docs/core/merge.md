@@ -19,6 +19,8 @@ class Block:
     n: int              # Number of samples
     sum: float          # Sum of y values
     sum2: float         # Sum of squared y values
+    ymin: float         # Minimum y value
+    ymax: float         # Maximum y value
     
     @property
     def mean(self) -> float:
@@ -26,10 +28,38 @@ class Block:
         return self.sum / self.n if self.n > 0 else 0.0
     
     @property
-    def variance(self) -> float:
-        """Calculate variance of y values."""
+    def var(self) -> float:
+        """Calculate unbiased sample variance."""
         # Implementation details...
+    
+    @property
+    def std(self) -> float:
+        """Calculate standard deviation."""
+        return math.sqrt(self.var)
+    
+    @property
+    def cv(self) -> float:
+        """Calculate coefficient of variation."""
+        # Implementation details...
+    
+    # NEW in v2.2.0: Class count properties for binary targets
+    @property
+    def positives(self) -> float:
+        """Count of positive samples (y=1). Equals sum for binary y."""
+        return self.sum
+    
+    @property
+    def negatives(self) -> float:
+        """Count of negative samples (y=0). Equals n - sum for binary y."""
+        return self.n - self.sum
 ```
+
+### Block Methods
+
+| Method | Description |
+|--------|-------------|
+| `merge_with(other)` | Merge with another block, pooling statistics |
+| `as_dict()` | Export block as dictionary (includes `positives` and `negatives`) |
 
 ### MergeStrategy
 Enum defining available merge selection strategies.
@@ -48,6 +78,13 @@ Calculates merge scores based on selected strategy.
 - **HIGHEST_PVALUE**: Uses two-sample t-test p-value
 - **SMALLEST_LOSS**: Negative of variance increase
 - **BALANCED_SIZE**: Prefers merging smaller blocks
+
+**Penalty/Bonus System:**
+- 1.5x bonus for merging undersized bins (below `min_samples`)
+- 1.3x bonus for merging bins with extreme event rates (0% or 100%)
+- 1.4x bonus for merging bins below `min_positives` (binary targets)
+- 1.4x bonus for merging bins below `min_negatives` (binary targets) *New in v2.2.0*
+- Penalty for creating oversized bins (above `max_samples`)
 
 ## Main Function
 
@@ -73,10 +110,48 @@ def merge_adjacent(
 
 **Returns:** List of merged blocks satisfying constraints
 
-**Algorithm Phases:**
-1. **Statistical Merging**: Merge based on strategy until max_bins reached
-2. **Min Samples Enforcement**: Ensure minimum samples per block
-3. **Min Positives Check**: For binary targets, ensure minimum positives
+## Algorithm Phases (Updated in v2.2.0)
+
+The merging algorithm now operates in three phases:
+
+### Phase 1: Statistical Merging
+- Merge based on strategy (p-value, loss, or size balance)
+- Continue until `max_bins` is reached
+- Respects `initial_pvalue` threshold
+
+### Phase 2: Min Samples Enforcement
+- Identify bins below `min_samples`
+- Merge undersized bins with best-scoring neighbor
+- Stop at `min_bins` floor
+
+### Phase 3: Class Count Enforcement (NEW in v2.2.0)
+- For binary targets only
+- Unified enforcement of both `min_positives` and `min_negatives`
+- Intelligently selects merge direction based on which neighbor better satisfies constraints
+- Stop at `min_bins` floor
+- Issues warnings if constraints cannot be fully satisfied
+
+```
+┌─────────────────────────────────────────┐
+│ Phase 1: Statistical Merging            │
+│ (respect max_bins)                      │
+└─────────────────┬───────────────────────┘
+                  ▼
+┌─────────────────────────────────────────┐
+│ Phase 2: Enforce min_samples            │
+│ (stop at min_bins)                      │
+└─────────────────┬───────────────────────┘
+                  ▼
+┌─────────────────────────────────────────┐
+│ Phase 3: Enforce min_positives AND      │
+│          min_negatives (binary only)    │
+│ (stop at min_bins)                      │
+└─────────────────┬───────────────────────┘
+                  ▼
+┌─────────────────────────────────────────┐
+│ Validation & Warnings                   │
+└─────────────────────────────────────────┘
+```
 
 ## Usage Example
 
@@ -86,8 +161,13 @@ from MOBPY.core import merge_adjacent, BinningConstraints, MergeStrategy
 # After PAVA
 pava_blocks = [...]  # From PAVA.export_blocks()
 
-# Define and resolve constraints
-constraints = BinningConstraints(max_bins=5, min_samples=0.05)
+# Define and resolve constraints with class count requirements
+constraints = BinningConstraints(
+    max_bins=5, 
+    min_samples=0.05,
+    min_positives=10,   # At least 10 positives per bin
+    min_negatives=20    # At least 20 negatives per bin
+)
 constraints.resolve(total_n=1000, total_pos=200)
 
 # Merge blocks
@@ -97,6 +177,11 @@ merged = merge_adjacent(
     is_binary_y=True,
     strategy=MergeStrategy.HIGHEST_PVALUE
 )
+
+# Check class counts on merged blocks
+for block in merged:
+    print(f"[{block.left}, {block.right}): "
+          f"n={block.n}, pos={block.positives}, neg={block.negatives}")
 ```
 
 ## Merge Strategies
@@ -131,6 +216,34 @@ block_objects = as_blocks(dict_blocks)
 
 ### validate_monotonicity()
 Validates that blocks maintain monotonicity after merging.
+
+### get_merge_summary()
+Generates summary statistics about the merge process.
+
+```python
+summary = get_merge_summary(original_blocks, merged_blocks)
+print(f"Compression: {summary['compression_ratio']:.2f}x")
+print(f"Size balance: {summary['size_balance']:.2f}")
+```
+
+## Validation (Updated in v2.2.0)
+
+The `_validate_merge_result()` function now checks:
+
+| Constraint | Action if Violated |
+|------------|-------------------|
+| `max_bins` | Raises `FittingError` |
+| `min_samples` | Warning (if above `min_bins`) |
+| `max_samples` | Warning |
+| `min_positives` | Warning with WoE stability note |
+| `min_negatives` | Warning with WoE stability note |
+
+**Warning Example:**
+```
+UserWarning: 2 bins have fewer than min_positives=10, but cannot merge 
+further without violating min_bins=3. WoE calculations may be unstable. 
+Consider relaxing min_positives or min_bins constraint.
+```
 
 ## Performance Notes
 - Time Complexity: O(k²) where k is number of blocks
