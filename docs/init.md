@@ -4,7 +4,7 @@
 MOBPY (Monotonic Optimal Binning for Python) is a fast, deterministic library for creating monotonic bins with respect to a target variable. It implements PAVA (Pool-Adjacent-Violators Algorithm) followed by constrained adjacent merging.
 
 ## Package Information
-- **Version**: 2.0.0
+- **Version**: 2.2.0
 - **License**: MIT
 - **Python Support**: 3.9 - 3.12
 
@@ -60,7 +60,7 @@ Returns the current version of MOBPY.
 
 ```python
 from MOBPY import get_version
-print(get_version())  # Output: "2.0.0"
+print(get_version())  # Output: "2.2.0"
 ```
 
 ## Module Access
@@ -72,7 +72,7 @@ Advanced users can access internal modules directly. See individual module docum
 
 ## Key Features
 - **Deterministic & Fast**: Stack-based PAVA with O(k) adjacent merges
-- **Robust Constraints**: Min/max samples, min positives, min/max bins
+- **Robust Constraints**: Min/max samples, min positives, min negatives, min/max bins
 - **Safe Edges**: First bin starts at -∞, last bin ends at +∞
 - **Well-tested**: Comprehensive unit and property-based tests
 

@@ -21,7 +21,7 @@ class MonotonicBinner:
         constraints: Optional[BinningConstraints] = None,
         exclude_values: Optional[Iterable] = None,
         merge_strategy: Union[MergeStrategy, str] = MergeStrategy.HIGHEST_PVALUE,
-        sort_kind: Optional[str] = None
+        sort_kind: Optional[str] = "quicksort"
     )
 ```
 
@@ -38,7 +38,7 @@ class MonotonicBinner:
 | **constraints** | `BinningConstraints` | `None` | Binning constraints |
 | **exclude_values** | `Iterable` | `None` | Values to exclude from binning |
 | **merge_strategy** | `MergeStrategy` | `HIGHEST_PVALUE` | Merge selection strategy |
-| **sort_kind** | `str` | `None` | Sorting algorithm |
+| **sort_kind** | `str` | `"quicksort"` | Sorting algorithm |
 
 ## Key Methods
 
@@ -101,6 +101,7 @@ Returns diagnostic information about the fitting process.
 - `partition_summary`: Data partition statistics
 - `is_binary`: Whether target is binary
 - `resolved_sign`: Detected monotonicity direction
+- `pava_diagnostics`: Diagnostic dict from the PAVA algorithm (see `PAVA.get_diagnostics()`)
 - `n_pava_blocks`: Number of blocks from PAVA
 - `n_final_bins`: Number of final bins
 - `constraints_satisfied`: Dictionary of constraint satisfaction status

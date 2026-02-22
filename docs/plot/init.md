@@ -64,8 +64,8 @@ from MOBPY.plot import plot_woe_bars
 fig, ax = plt.subplots(figsize=(12, 6))
 ax.set_facecolor('#f0f0f0')
 
-plot_woe_bars(binner.summary_(), ax=ax, 
-              bar_color='#2E86AB', line_color='#A23B72')
+plot_woe_bars(binner.summary_(), ax=ax,
+              bar_color='#2E86AB', positive_color='#388E3C', negative_color='#A23B72')
 
 ax.set_title('Custom WoE Visualization', fontsize=16)
 ax.grid(True, alpha=0.3)

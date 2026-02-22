@@ -47,12 +47,12 @@ After calling `resolve()`, the following absolute values are available:
 
 ## Methods
 
-### resolve(total_n: int, total_pos: Optional[int] = None)
+### resolve(*, total_n: int, total_pos: int = 0)
 Converts fractional constraints to absolute values based on data size.
 
 **Parameters:**
 - `total_n`: Total number of samples in clean data
-- `total_pos`: Total number of positive samples (for binary targets)
+- `total_pos`: Total number of positive samples (for binary targets). Defaults to `0` for non-binary targets.
 
 **Feasibility Warnings (New in v2.2.0):**
 The method now issues warnings when constraints are mathematically infeasible:
@@ -82,7 +82,7 @@ Validates that all constraints are consistent and feasible.
 ### copy()
 Creates a deep copy of the constraints (includes `min_negatives`).
 
-### is_resolved (property)
+### is_resolved() -> bool
 Returns True if constraints have been resolved to absolute values.
 
 ## Usage Patterns

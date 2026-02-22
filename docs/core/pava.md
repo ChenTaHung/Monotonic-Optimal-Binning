@@ -12,10 +12,10 @@ The PAVA class implements the Pool-Adjacent-Violators Algorithm for isotonic reg
 class PAVA:
     def __init__(
         self,
+        *,
         df: pd.DataFrame,
         x: str,
         y: str,
-        *,
         metric: Literal["mean"] = "mean",
         sign: Literal["+", "-", "auto"] = "auto",
         strict: bool = True,
@@ -40,10 +40,9 @@ class PAVA:
 ### Public Attributes (after fitting)
 | Attribute | Type | Description |
 |-----------|------|-------------|
+| **blocks_** | `List[_Block]` | Monotone blocks after fitting |
 | **groups_** | `pd.DataFrame` | Grouped statistics for each unique x value |
 | **resolved_sign_** | `Literal["+", "-"]` | Actual monotonicity direction used |
-| **n_iterations_** | `int` | Number of PAVA iterations performed |
-| **is_fitted_** | `bool` | Whether fit() has been called |
 
 ### Groups DataFrame Columns
 After fitting, `groups_` contains:
@@ -85,7 +84,7 @@ pava = PAVA(df=data, x='age', y='default', sign='auto')
 pava.fit()
 
 print(f"Resolved sign: {pava.resolved_sign_}")
-print(f"Iterations: {pava.n_iterations_}")
+print(f"Blocks: {len(pava.blocks_)}")
 ```
 
 ### `export_blocks(as_dict: bool = True) -> List[Union[Dict, Block]]`
@@ -146,19 +145,22 @@ Returns diagnostic information about the fitting process.
 **Returns:** Dictionary with diagnostics:
 ```python
 {
-    'n_unique_x': int,           # Number of unique x values
-    'n_blocks': int,             # Number of final blocks
-    'n_iterations': int,         # PAVA iterations
+    'fitted': bool,              # Whether fit() has been called
+    'n_initial_groups': int,     # Number of unique x groups before PAVA
+    'n_final_blocks': int,       # Number of blocks after PAVA
+    'n_merges': int,             # Number of merge operations performed
+    'compression_ratio': float,  # n_initial_groups / n_final_blocks
     'resolved_sign': str,        # '+' or '-'
-    'compression_ratio': float,  # n_unique_x / n_blocks
-    'strict_applied': bool       # Whether strict monotonicity was enforced
+    'strict_monotone': bool,     # Whether strict monotonicity was enforced
+    'total_samples': int,        # Total number of samples
+    'mean_block_size': float     # Average samples per block
 }
 ```
 
 **Example:**
 ```python
 diag = pava.get_diagnostics()
-print(f"Compression: {diag['n_unique_x']} -> {diag['n_blocks']} blocks")
+print(f"Compression: {diag['n_initial_groups']} -> {diag['n_final_blocks']} blocks")
 print(f"Ratio: {diag['compression_ratio']:.2f}x")
 ```
 
@@ -168,16 +170,24 @@ print(f"Ratio: {diag['compression_ratio']:.2f}x")
 Internal class for maintaining block statistics during PAVA.
 
 **Attributes:**
-- **indices**: List of group indices in this block
+- **left**: Left edge (inclusive) of the block's x-range
+- **right**: Right edge (exclusive) of the block's x-range
 - **n**: Total sample count
 - **sum**: Sum of y values
 - **sum2**: Sum of y² values
 - **ymin**: Minimum y value
 - **ymax**: Maximum y value
+- **merge_count**: Number of merges that produced this block
+- **original_groups**: List of original x values merged into this block
+
+**Properties:**
+- **mean**: Block mean (sum/n)
+- **var**: Unbiased sample variance
+- **std**: Sample standard deviation
 
 **Methods:**
-- **mean**: Property returning block mean
-- **merge_with(other)**: Merge with another block, pooling statistics
+- **merge_with(other)**: Merge with another block, pooling all statistics
+- **as_dict()**: Export block as dictionary
 
 ## Algorithm Details
 
@@ -284,12 +294,12 @@ assert pava.validate_monotonicity(), "Monotonicity violated!"
 diag = pava.get_diagnostics()
 print(f"""
 PAVA Diagnostics:
-  Unique x values: {diag['n_unique_x']}
-  Final blocks: {diag['n_blocks']}
+  Initial groups: {diag['n_initial_groups']}
+  Final blocks: {diag['n_final_blocks']}
   Compression: {diag['compression_ratio']:.2f}x
-  Iterations: {diag['n_iterations']}
+  Merges: {diag['n_merges']}
   Direction: {diag['resolved_sign']}
-  Strict monotonicity: {diag['strict_applied']}
+  Strict monotonicity: {diag['strict_monotone']}
 """)
 ```
 
