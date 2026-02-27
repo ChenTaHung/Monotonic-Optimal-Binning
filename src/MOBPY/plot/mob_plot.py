@@ -9,6 +9,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.axes import Axes
@@ -950,7 +951,7 @@ def plot_categorical_merge(
     }
 
     # ── colour palette (one colour per bin, in display order) ───────────────
-    palette = plt.cm.get_cmap("tab10", max(n_bins, 1))
+    palette = matplotlib.colormaps["tab10"].resampled(max(n_bins, 1))
     # colour keyed by *display rank* so rank-0 (lowest rate) is colour-0
     rank_color: Dict[int, Any] = {rank: palette(rank) for rank in range(n_bins)}
     bin_color: Dict[int, Any] = {
