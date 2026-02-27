@@ -372,19 +372,19 @@ class TestExceptionIntegration:
         
         # Test with invalid data
         df = pd.DataFrame({
-            'x': ['a', 'b', 'c'],  # Non-numeric
+            'x': ['a', 'b', 'c'],  # Non-numeric x with default x_type='numeric'
             'y': [1, 2, 3]
         })
-        
+
         binner = MonotonicBinner(df=df, x='x', y='y')
-        
-        # May raise ValueError or DataError depending on where validation happens
+
+        # Numeric path (default) tries float(x_val) in PAVA → ValueError
         with pytest.raises((DataError, ValueError)) as exc_info:
             binner.fit()
-        
-        # Should indicate the problem is with conversion/numeric data
+
+        # Should indicate the problem is a dtype conversion failure
         error_msg = str(exc_info.value).lower()
-        assert "convert" in error_msg or "numeric" in error_msg or "float" in error_msg
+        assert any(kw in error_msg for kw in ("convert", "numeric", "float"))
     
     def test_exception_in_constraint_resolution(self):
         """Test exception during constraint resolution."""
