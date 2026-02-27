@@ -42,8 +42,10 @@ class BinningConstraints:
             If in (0,1], treated as fraction of total negatives.
             If > 1, treated as absolute count. None defaults to 0.
             Required for stable WoE calculations.
-        initial_pvalue: Initial p-value threshold for merge decisions.
-            Higher values make merging more aggressive. Range: (0, 1].
+        initial_pvalue: Initial p-value threshold for merge decisions in the
+            **numeric** path (Welch's t-test). Higher values make merging more
+            aggressive. Range: (0, 1]. Not used for categorical x (see
+            ``categorical_alpha`` on ``MonotonicBinner``).
         maximize_bins: If True, prioritize staying at/below max_bins.
             If False, prioritize staying at/above min_bins.
     

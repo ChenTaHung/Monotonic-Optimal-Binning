@@ -32,12 +32,79 @@ class MergeStrategy(Enum):
 
 
 @dataclass
-class Block:
-    """Contiguous block with sufficient statistics for merging.
-    
+class _BlockStatsBase:
+    """Shared sufficient statistics for numeric and categorical blocks.
+
+    Provides O(1) computation of common statistics from stored sufficient
+    statistics (n, sum, sum2). Both Block and CategoryBlock inherit from
+    this base to avoid code duplication.
+
+    Attributes:
+        n: Number of samples.
+        sum: Sum of y values (equals count of positives for binary y).
+        sum2: Sum of y² values (for variance calculation).
+        ymin: Minimum y value.
+        ymax: Maximum y value.
+    """
+
+    n: int
+    sum: float
+    sum2: float
+    ymin: float
+    ymax: float
+
+    @property
+    def mean(self) -> float:
+        """Sample mean of y values, or 0.0 for empty blocks."""
+        return self.sum / self.n if self.n > 0 else 0.0
+
+    @property
+    def var(self) -> float:
+        """Unbiased sample variance, guaranteed non-negative."""
+        if self.n <= 1:
+            return 0.0
+        mean_sq = (self.sum / self.n) ** 2
+        mean_of_sq = self.sum2 / self.n
+        raw_var = (mean_of_sq - mean_sq) * self.n / (self.n - 1)
+        return max(0.0, raw_var)
+
+    @property
+    def std(self) -> float:
+        """Sample standard deviation."""
+        return math.sqrt(self.var)
+
+    @property
+    def cv(self) -> float:
+        """Coefficient of variation (std/mean), or 0 if mean is 0."""
+        if abs(self.mean) < 1e-10:
+            return 0.0
+        return self.std / abs(self.mean)
+
+    @property
+    def positives(self) -> float:
+        """Count of positive samples (y=1) for binary targets.
+
+        For binary targets where y ∈ {0, 1}, sum equals the count of 1s.
+        """
+        return self.sum
+
+    @property
+    def negatives(self) -> float:
+        """Count of negative samples (y=0) for binary targets.
+
+        For binary targets where y ∈ {0, 1}, negatives = n - sum.
+        """
+        return self.n - self.sum
+
+
+@dataclass
+class Block(_BlockStatsBase):
+    """Contiguous numeric block with sufficient statistics for merging.
+
     Represents a range of x values with aggregated y statistics.
     Designed for O(1) merge operations and variance calculations.
-    
+    Inherits shared statistics properties from _BlockStatsBase.
+
     Attributes:
         left: Left boundary (inclusive) of x range.
         right: Right boundary (exclusive) of x range.
@@ -46,99 +113,15 @@ class Block:
         sum2: Sum of y² values (for variance).
         ymin: Minimum y value.
         ymax: Maximum y value.
-        
-    Properties:
-        mean: Sample mean of y values.
-        var: Unbiased sample variance.
-        std: Sample standard deviation.
-        positives: Count of positive samples (for binary y, equals sum).
-        negatives: Count of negative samples (for binary y, equals n - sum).
     """
-    
+
     left: float
     right: float
-    n: int
-    sum: float
-    sum2: float
-    ymin: float
-    ymax: float
-    
+
     # Optional metadata for tracking
     merge_history: List[Tuple[float, float]] = field(default_factory=list, compare=False)
     pvalue_history: List[float] = field(default_factory=list, compare=False)
-    
-    @property
-    def mean(self) -> float:
-        """Calculate sample mean safely.
-        
-        Returns:
-            float: Mean value, or 0.0 for empty blocks.
-        """
-        return self.sum / self.n if self.n > 0 else 0.0
-    
-    @property
-    def var(self) -> float:
-        """Calculate unbiased sample variance.
-        
-        Uses the computational formula with numerical stability checks.
-        
-        Returns:
-            float: Variance, guaranteed non-negative.
-        """
-        if self.n <= 1:
-            return 0.0
-        
-        # Use stable computation
-        mean_sq = (self.sum / self.n) ** 2
-        mean_of_sq = self.sum2 / self.n
-        
-        # Ensure non-negative (handles numerical errors)
-        raw_var = (mean_of_sq - mean_sq) * self.n / (self.n - 1)
-        return max(0.0, raw_var)
-    
-    @property
-    def std(self) -> float:
-        """Calculate sample standard deviation.
-        
-        Returns:
-            float: Square root of variance.
-        """
-        return math.sqrt(self.var)
-    
-    @property
-    def cv(self) -> float:
-        """Calculate coefficient of variation.
-        
-        Returns:
-            float: std/mean ratio, or 0 if mean is 0.
-        """
-        if abs(self.mean) < 1e-10:
-            return 0.0
-        return self.std / abs(self.mean)
-    
-    # NEW: Properties for binary target class counts
-    @property
-    def positives(self) -> float:
-        """Count of positive samples (y=1) for binary targets.
-        
-        For binary targets where y ∈ {0, 1}, sum equals the count of 1s.
-        
-        Returns:
-            float: Number of positive samples (equals self.sum).
-        """
-        return self.sum
-    
-    @property
-    def negatives(self) -> float:
-        """Count of negative samples (y=0) for binary targets.
-        
-        For binary targets where y ∈ {0, 1}, negatives = n - sum.
-        
-        Returns:
-            float: Number of negative samples.
-        """
-        return self.n - self.sum
-    
+
     def merge_with(self, other: "Block") -> "Block":
         """Merge with another block, pooling statistics.
         
@@ -1209,6 +1192,7 @@ def _enforce_min_class_counts(
 
 # Public API exports
 __all__ = [
+    '_BlockStatsBase',
     'Block',
     'MergeStrategy',
     'MergeScorer',
