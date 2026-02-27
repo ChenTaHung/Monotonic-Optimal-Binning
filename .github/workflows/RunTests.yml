@@ -16,7 +16,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.14"
 
       - name: Cache pip
         uses: actions/cache@v4
@@ -77,6 +77,10 @@ jobs:
       - name: Run MOB Tests
         run: |
           pytest -vv tests/test_mob.py
+
+      - name: Run Categorical Merge Tests
+        run: |
+          pytest -vv tests/test_categorical_merge.py
 
       - name: Run Plotting Tests
         run: |
