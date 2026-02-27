@@ -1,69 +1,105 @@
 # `plot_woe_bars` Function Documentation
 
 ## Overview
-The `plot_woe_bars` function creates a bar chart visualization of Weight of Evidence (WoE) values across bins for binary classification problems. It helps assess the predictive power of each bin and the monotonic relationship with the target variable.
+
+The `plot_woe_bars` function creates a bar chart of Weight of Evidence (WoE) values across bins for binary classification problems. It helps assess the predictive power of each bin and the monotonic relationship with the target variable.
 
 ## Function Signature
+
 ```python
 def plot_woe_bars(
     summary_df: pd.DataFrame,
     *,
     ax: Optional[Axes] = None,
-    figsize: Tuple[float, float] = (12, 6),
+    figsize: Tuple[float, float] = (10, 6),
     title: Optional[str] = None,
-    bar_color: str = "#1E88E5",
-    positive_color: str = "#43A047",
-    negative_color: str = "#E53935",
+    bar_color: str = "#1976D2",
+    positive_color: str = "#388E3C",
+    negative_color: str = "#D32F2F",
     show_values: bool = True,
-    value_format: str = ".3f",
-    show_grid: bool = True,
-    grid_alpha: float = 0.3,
-    bar_width: float = 0.8,
     show_iv: bool = True,
-    xlabel: Optional[str] = None,
-    ylabel: Optional[str] = None,
-    rotation: int = 45
+    rotation: int = 45,
+    bar_width: float = 0.8,
+    tick_labels: Optional[Union[List[str], str]] = None,
 ) -> Axes
 ```
+
+All parameters after `summary_df` are keyword-only.
 
 ## Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| **summary_df** | `pd.DataFrame` | required | Binning summary with 'bucket' and 'woe' columns |
-| **ax** | `Optional[Axes]` | `None` | Matplotlib axes to plot on |
-| **figsize** | `Tuple[float, float]` | `(12, 6)` | Figure size if creating new figure |
-| **title** | `Optional[str]` | `None` | Plot title. Auto-generated if None |
-| **bar_color** | `str` | `"#1E88E5"` | Default bar color (blue) |
-| **positive_color** | `str` | `"#43A047"` | Color for positive WoE (green) |
-| **negative_color** | `str` | `"#E53935"` | Color for negative WoE (red) |
-| **show_values** | `bool` | `True` | Display WoE values on bars |
-| **value_format** | `str` | `".3f"` | Format string for values |
-| **show_grid** | `bool` | `True` | Show grid lines |
-| **grid_alpha** | `float` | `0.3` | Grid transparency |
-| **bar_width** | `float` | `0.8` | Width of bars (0-1) |
-| **show_iv** | `bool` | `True` | Show total IV in title |
-| **xlabel** | `Optional[str]` | `None` | X-axis label |
-| **ylabel** | `Optional[str]` | `None` | Y-axis label |
-| **rotation** | `int` | `45` | X-tick label rotation |
+| **summary_df** | `pd.DataFrame` | required | Summary from `binner.summary_()` — must have `bucket` and `woe` columns |
+| **ax** | `Optional[Axes]` | `None` | Matplotlib axes to plot on; creates new figure if `None` |
+| **figsize** | `Tuple[float, float]` | `(10, 6)` | Figure size used when `ax` is `None` |
+| **title** | `Optional[str]` | `None` | Plot title; auto-generated if `None` |
+| **bar_color** | `str` | `"#1976D2"` | Fallback bar colour when positive/negative colours are not used |
+| **positive_color** | `str` | `"#388E3C"` | Colour for positive WoE bars (green) |
+| **negative_color** | `str` | `"#D32F2F"` | Colour for negative WoE bars (red) |
+| **show_values** | `bool` | `True` | Display WoE values as text on each bar |
+| **show_iv** | `bool` | `True` | Append total IV to the plot title |
+| **rotation** | `int` | `45` | X-tick label rotation angle |
+| **bar_width** | `float` | `0.8` | Bar width (0–1) |
+| **tick_labels** | `Optional[Union[List[str], str]]` | `None` | X-axis tick label override (see below) |
+
+### `tick_labels` Options
+
+| Value | Behaviour |
+|-------|-----------|
+| `None` (default) | Use `bucket` column verbatim — fully backward-compatible for numeric binning |
+| `list[str]` | Use the provided strings directly (one per non-NaN WoE row) |
+| `'auto'` | Use `bucket` verbatim when labels are plain numeric intervals; generate compact `"Bin N\n(XX.X%)"` labels (0-based) when any label starts with `'{'` (categorical set labels) |
+
+Detection for `'auto'` is structural — only labels starting with `{` trigger compact output. Plain numeric labels like `(-inf, 25.5)` are never modified.
 
 ## Returns
-- **Axes**: Matplotlib Axes object containing the plot
+
+`Axes` — the matplotlib Axes containing the plot.
+
+## Raises
+
+`DataError` — if `summary_df` is missing the `woe` or `bucket` column.
 
 ## Usage Examples
 
-### Basic Usage
+### Numeric binning (default)
+
 ```python
 from MOBPY.plot import plot_woe_bars
 
-# After fitting binner on binary target
+binner = MonotonicBinner(df, x='age', y='default')
+binner.fit()
 summary = binner.summary_()
 
 ax = plot_woe_bars(summary)
 plt.show()
 ```
 
-### Custom Styling
+### Categorical binning with compact labels
+
+```python
+from MOBPY.plot import plot_woe_bars
+
+binner = MonotonicBinner(df, x='merchant', y='is_fraud',
+                         x_type='categorical')
+binner.fit()
+summary = binner.summary_()
+
+# tick_labels='auto' detects categorical labels and generates "Bin 0\n(4.5%)" style
+ax = plot_woe_bars(summary, tick_labels='auto', show_iv=True)
+plt.show()
+```
+
+### Explicit label override
+
+```python
+labels = [f"Group {i}" for i in range(len(summary))]
+ax = plot_woe_bars(summary, tick_labels=labels)
+```
+
+### Custom styling
+
 ```python
 fig, ax = plt.subplots(figsize=(14, 7))
 
@@ -75,195 +111,48 @@ plot_woe_bars(
     negative_color='darkred',
     bar_width=0.6,
     show_values=True,
-    value_format=".2f"
+    rotation=0,
 )
-
-ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
 plt.tight_layout()
 plt.show()
-```
-
-### Highlighting Significant Bins
-```python
-ax = plot_woe_bars(summary)
-
-# Highlight bins with high absolute WoE
-for i, (idx, row) in enumerate(summary.iterrows()):
-    if abs(row['woe']) > 0.5:
-        ax.patches[i].set_edgecolor('black')
-        ax.patches[i].set_linewidth(2)
-        ax.annotate('High Impact', 
-                   xy=(i, row['woe']), 
-                   xytext=(5, 10),
-                   textcoords='offset points',
-                   fontsize=8, 
-                   style='italic')
-```
-
-### Combined with IV Information
-```python
-ax = plot_woe_bars(summary, show_iv=True)
-
-# Add IV contribution for each bin
-for i, (idx, row) in enumerate(summary.iterrows()):
-    if 'iv' in row:
-        ax.text(i, row['woe']/2, f"IV: {row['iv']:.3f}", 
-               ha='center', va='center', fontsize=8)
 ```
 
 ## Visual Interpretation
 
 ### WoE Values
-- **Positive WoE** (green): Good rate > Bad rate (lower risk)
-- **Negative WoE** (red): Good rate < Bad rate (higher risk)
-- **Zero WoE**: Good rate = Bad rate (neutral)
+
+- **Positive WoE** (green): Event rate below average — lower risk bin
+- **Negative WoE** (red): Event rate above average — higher risk bin
+- **Zero WoE**: Neutral — event rate equals population average
 - **Magnitude**: Larger absolute values indicate stronger predictive power
 
-### Monotonicity Check
-- Bars should show consistent trend (all increasing or all decreasing)
-- Mixed directions suggest non-monotonic relationship
-
 ### Information Value
-- Total IV shown in title indicates overall predictive power
-- IV < 0.1: Weak predictor
-- IV 0.1-0.3: Medium predictor
-- IV > 0.3: Strong predictor
 
-## Advanced Features
+Total IV shown in the title when `show_iv=True`:
 
-### Conditional Coloring
+| IV Range | Interpretation |
+|----------|----------------|
+| < 0.1 | Weak predictor |
+| 0.1 – 0.3 | Medium predictor |
+| > 0.3 | Strong predictor |
+
+## Side-by-side with `plot_categorical_merge`
+
 ```python
-# Color based on WoE magnitude
-def get_color(woe):
-    if abs(woe) < 0.1:
-        return 'gray'
-    elif woe > 0:
-        return 'green'
-    else:
-        return 'red'
+from MOBPY.plot import plot_woe_bars, plot_categorical_merge
 
-ax = plot_woe_bars(summary)
-for i, (idx, row) in enumerate(summary.iterrows()):
-    ax.patches[i].set_facecolor(get_color(row['woe']))
-```
+fig, axes = plt.subplots(1, 2, figsize=(18, 5))
 
-### Adding Reference Lines
-```python
-ax = plot_woe_bars(summary)
-
-# Add significance thresholds
-ax.axhline(y=0.3, color='green', linestyle='--', alpha=0.5, label='Strong positive')
-ax.axhline(y=-0.3, color='red', linestyle='--', alpha=0.5, label='Strong negative')
-ax.axhline(y=0, color='black', linestyle='-', alpha=0.5, label='Neutral')
-
-ax.legend(loc='upper left')
-```
-
-### Annotating with Statistics
-```python
-ax = plot_woe_bars(summary)
-
-# Add sample information
-for i, (idx, row) in enumerate(summary.iterrows()):
-    count_pct = row.get('count_pct', 0)
-    ax.text(i, -0.5, f"{count_pct:.1f}%", 
-           ha='center', fontsize=8, color='gray')
-
-ax.text(0.5, -0.6, 'Sample %', transform=ax.transAxes, 
-        ha='center', fontsize=9, color='gray')
-```
-
-## Customization Examples
-
-### Publication-Ready
-```python
-fig, ax = plt.subplots(figsize=(10, 5))
-
-plot_woe_bars(
-    summary,
-    ax=ax,
-    bar_color='#2E4057',
-    show_grid=True,
-    grid_alpha=0.2,
-    show_values=True,
-    value_format=".2f",
-    rotation=0  # Horizontal labels
-)
-
-ax.set_title('Weight of Evidence Analysis', fontsize=14, fontweight='bold')
-ax.set_xlabel('Feature Bins', fontsize=12)
-ax.set_ylabel('WoE', fontsize=12)
-ax.spines['top'].set_visible(False)
-ax.spines['right'].set_visible(False)
+plot_woe_bars(binner.summary_(), ax=axes[0], tick_labels='auto', show_iv=True)
+plot_categorical_merge(binner, ax=axes[1], show_counts=False)
 
 plt.tight_layout()
-```
-
-### Interactive Tooltips (for Jupyter)
-```python
-import mplcursors
-
-ax = plot_woe_bars(summary)
-
-cursor = mplcursors.cursor(ax.patches, hover=True)
-
-@cursor.connect("add")
-def on_add(sel):
-    idx = sel.index
-    row = summary.iloc[idx]
-    sel.annotation.set_text(
-        f"Bin: {row['bucket']}\n"
-        f"WoE: {row['woe']:.3f}\n"
-        f"Count: {row.get('count', 'N/A')}\n"
-        f"Bad Rate: {row.get('mean', 'N/A'):.2%}"
-    )
-```
-
-## Common Issues and Solutions
-
-### Issue: Overlapping X-axis Labels
-```python
-# Solution 1: Rotate labels more
-plot_woe_bars(summary, rotation=90)
-
-# Solution 2: Shorten labels
-summary_copy = summary.copy()
-summary_copy['bucket'] = summary_copy['bucket'].str.replace('[-inf,', '[<', regex=False)
-plot_woe_bars(summary_copy)
-```
-
-### Issue: Values Not Visible
-```python
-# Solution: Adjust text position
-ax = plot_woe_bars(summary, show_values=False)
-
-for i, (idx, row) in enumerate(summary.iterrows()):
-    y_pos = row['woe'] + (0.05 if row['woe'] > 0 else -0.05)
-    ax.text(i, y_pos, f"{row['woe']:.2f}", 
-           ha='center', va='bottom' if row['woe'] > 0 else 'top',
-           fontsize=9)
-```
-
-## Performance Notes
-- Handles up to 20 bins efficiently
-- Automatically adjusts layout for many bins
-- Caches color calculations for speed
-
-## Integration with Other Plots
-```python
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
-
-# WoE bars on top
-plot_woe_bars(summary, ax=ax1)
-
-# Sample distribution below
-plot_sample_distribution(summary, ax=ax2)
-
-plt.tight_layout()
+plt.show()
 ```
 
 ## See Also
-- [`plot_event_rate`](./plot_event_rate.md) - Event rate visualization
-- [`plot_bin_statistics`](./plot_bin_statistics.md) - Comprehensive bin analysis
-- [`MonotonicBinner`](../binning/mob.md) - Main binning class
-- [`woe_iv`](../core/utils.md#woe_iv) - WoE/IV calculation details
+
+- [`plot_event_rate`](./plot_event_rate.md) — event rate visualization with optional `tick_labels`
+- [`plot_categorical_merge`](./plot_categorical_merge.md) — category merge visualization
+- [`plot_bin_statistics`](./plot_bin_statistics.md) — comprehensive multi-panel view
+- [`MonotonicBinner`](../../binning/mob.md) — main binning class

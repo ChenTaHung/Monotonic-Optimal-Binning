@@ -1,334 +1,167 @@
 # `plot_event_rate` Function Documentation
 
 ## Overview
-The `plot_event_rate` function creates a dual-axis visualization showing both the event rate (bad rate for binary classification) and sample distribution across bins. This helps identify bins with high risk and ensures adequate sample representation.
+
+The `plot_event_rate` function creates a dual-axis visualization showing the event rate (mean of y) as a line overlaid on sample counts as bars. It helps assess both the risk pattern and the statistical reliability of each bin.
 
 ## Function Signature
+
 ```python
 def plot_event_rate(
     summary_df: pd.DataFrame,
     *,
     ax: Optional[Axes] = None,
-    figsize: Tuple[float, float] = (12, 6),
+    figsize: Tuple[float, float] = (10, 6),
     title: Optional[str] = None,
-    bar_color: str = "#B3E5FC",
+    bar_color: str = "#64B5F6",
     line_color: str = "#E53935",
-    point_color: str = "#C62828",
-    bar_alpha: float = 0.7,
-    line_width: float = 2.5,
-    point_size: float = 80,
-    show_values: bool = True,
-    value_format: str = ".1%",
-    show_grid: bool = True,
-    grid_alpha: float = 0.3,
-    show_legend: bool = True,
-    xlabel: Optional[str] = None,
-    y1_label: Optional[str] = None,
-    y2_label: Optional[str] = None,
+    show_counts: bool = True,
+    show_rate_values: bool = True,
     rotation: int = 45,
-    show_trend: bool = True
+    y_format: str = "percentage",
+    tick_labels: Optional[Union[List[str], str]] = None,
 ) -> Axes
 ```
+
+All parameters after `summary_df` are keyword-only.
 
 ## Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| **summary_df** | `pd.DataFrame` | required | Binning summary with event rate and count data |
-| **ax** | `Optional[Axes]` | `None` | Matplotlib axes to plot on |
-| **figsize** | `Tuple[float, float]` | `(12, 6)` | Figure size if creating new figure |
-| **title** | `Optional[str]` | `None` | Plot title |
-| **bar_color** | `str` | `"#B3E5FC"` | Color for sample distribution bars (light blue) |
-| **line_color** | `str` | `"#E53935"` | Color for event rate line (red) |
-| **point_color** | `str` | `"#C62828"` | Color for event rate points (dark red) |
-| **bar_alpha** | `float` | `0.7` | Transparency of bars |
-| **line_width** | `float` | `2.5` | Width of event rate line |
-| **point_size** | `float` | `80` | Size of event rate points |
-| **show_values** | `bool` | `True` | Display values on plot |
-| **value_format** | `str` | `".1%"` | Format for event rate values |
-| **show_grid** | `bool` | `True` | Show grid lines |
-| **grid_alpha** | `float` | `0.3` | Grid transparency |
-| **show_legend** | `bool` | `True` | Display legend |
-| **xlabel** | `Optional[str]` | `None` | X-axis label |
-| **y1_label** | `Optional[str]` | `None` | Left y-axis label (count) |
-| **y2_label** | `Optional[str]` | `None` | Right y-axis label (rate) |
-| **rotation** | `int` | `45` | X-tick label rotation |
-| **show_trend** | `bool` | `True` | Show trend line for event rate |
+| **summary_df** | `pd.DataFrame` | required | Summary from `binner.summary_()` — must have `bucket`, `mean`, `count` columns |
+| **ax** | `Optional[Axes]` | `None` | Matplotlib axes to plot on; creates new figure if `None` |
+| **figsize** | `Tuple[float, float]` | `(10, 6)` | Figure size used when `ax` is `None` |
+| **title** | `Optional[str]` | `None` | Plot title; auto-generated if `None` |
+| **bar_color** | `str` | `"#64B5F6"` | Colour for sample count bars (light blue) |
+| **line_color** | `str` | `"#E53935"` | Colour for the event rate line (red) |
+| **show_counts** | `bool` | `True` | Show sample counts as bars on the primary y-axis |
+| **show_rate_values** | `bool` | `True` | Annotate the event rate line with numeric values |
+| **rotation** | `int` | `45` | X-tick label rotation angle |
+| **y_format** | `str` | `"percentage"` | Rate scale: `"percentage"` (0–100 %) or `"decimal"` (0–1) |
+| **tick_labels** | `Optional[Union[List[str], str]]` | `None` | X-axis tick label override (see below) |
+
+### `tick_labels` Options
+
+| Value | Behaviour |
+|-------|-----------|
+| `None` (default) | Use `bucket` column verbatim — fully backward-compatible |
+| `list[str]` | Use the provided strings directly (one per row) |
+| `'auto'` | Use `bucket` verbatim for numeric bins; generate compact `"Bin N\n(XX.X%)"` labels (0-based) when any label starts with `'{'` (categorical set labels) |
 
 ## Returns
-- **Axes**: Primary axes object (secondary axes accessible via ax.right_ax)
 
-## Usage Examples
+`Axes` — the primary (left) axes. The secondary right axes (event rate scale) is accessible via `ax.right_ax` if needed for further customization.
 
-### Basic Usage
-```python
-from MOBPY.plot import plot_event_rate
+## Raises
 
-# After fitting binner
-summary = binner.summary_()
-
-ax = plot_event_rate(summary)
-plt.show()
-```
-
-### Custom Styling
-```python
-fig, ax = plt.subplots(figsize=(14, 7))
-
-plot_event_rate(
-    summary,
-    ax=ax,
-    title="Risk Distribution: Default Rate and Sample Count by Age",
-    bar_color='lightgray',
-    line_color='darkred',
-    point_color='red',
-    bar_alpha=0.5,
-    show_trend=True,
-    value_format=".2%"
-)
-
-plt.tight_layout()
-plt.show()
-```
-
-### Highlighting Risk Levels
-```python
-ax = plot_event_rate(summary)
-
-# Add risk level zones
-ax2 = ax.right_ax  # Access secondary axis
-ax2.axhspan(0, 0.1, color='green', alpha=0.1, label='Low Risk')
-ax2.axhspan(0.1, 0.3, color='yellow', alpha=0.1, label='Medium Risk')
-ax2.axhspan(0.3, 1.0, color='red', alpha=0.1, label='High Risk')
-
-ax2.legend(loc='upper left')
-```
-
-### Adding Statistical Information
-```python
-ax = plot_event_rate(summary)
-
-# Add mean line
-overall_rate = summary['mean'].mean()
-ax2 = ax.right_ax
-ax2.axhline(y=overall_rate, color='blue', linestyle='--', 
-            alpha=0.7, label=f'Overall Rate: {overall_rate:.2%}')
-
-# Add confidence bands
-std = summary['mean'].std()
-ax2.fill_between(range(len(summary)), 
-                 overall_rate - std, overall_rate + std,
-                 alpha=0.2, color='blue', label='±1 Std Dev')
-
-ax2.legend(loc='upper right')
-```
+`DataError` — if `summary_df` is missing any of the required columns (`bucket`, `mean`, `count`).
 
 ## Visual Components
 
-### Primary Axis (Left)
-- **Bars**: Sample count or percentage per bin
-- **Scale**: Absolute count or percentage of total
-- **Purpose**: Shows data distribution across bins
+### Primary axis (left)
 
-### Secondary Axis (Right)
-- **Line**: Event rate (bad rate) across bins
-- **Points**: Actual event rate values
-- **Scale**: Rate from 0 to 1 (or 0% to 100%)
-- **Purpose**: Shows risk level per bin
+When `show_counts=True`, sample counts per bin are drawn as bars. The y-axis label reads `"Sample Count"`.
 
-### Trend Indicators
-- **Monotonic**: Line should be consistently increasing or decreasing
-- **Volatility**: Smooth line indicates stable pattern
-- **Outliers**: Sharp changes may indicate problematic bins
+### Secondary axis (right)
 
-## Advanced Features
+The event rate (mean of y) is drawn as a line with circular markers. The y-axis is formatted as a percentage (`y_format="percentage"`) or decimal (`y_format="decimal"`).
 
-### Interactive Annotations
+## Usage Examples
+
+### Basic numeric binning
+
 ```python
-ax = plot_event_rate(summary)
+from MOBPY.plot import plot_event_rate
 
-# Add hover information
-for i, (idx, row) in enumerate(summary.iterrows()):
-    # Annotate high-risk bins
-    if row.get('mean', 0) > 0.3:
-        ax.annotate(
-            f"High Risk\n{row['count']} samples",
-            xy=(i, row['count']),
-            xytext=(5, 10),
-            textcoords='offset points',
-            bbox=dict(boxstyle='round,pad=0.3', 
-                     facecolor='yellow', alpha=0.7),
-            arrowprops=dict(arrowstyle='->', 
-                          connectionstyle='arc3,rad=0')
-        )
+binner = MonotonicBinner(df, x='age', y='default')
+binner.fit()
+summary = binner.summary_()
+
+ax = plot_event_rate(summary, show_counts=True)
+plt.show()
 ```
 
-### Confidence Intervals
+### Categorical binning with compact labels
+
 ```python
-import scipy.stats as stats
+binner = MonotonicBinner(df, x='merchant', y='is_fraud',
+                         x_type='categorical')
+binner.fit()
+summary = binner.summary_()
 
-ax = plot_event_rate(summary)
-ax2 = ax.right_ax
-
-# Calculate confidence intervals for event rate
-for i, (idx, row) in enumerate(summary.iterrows()):
-    n = row['count']
-    p = row['mean']
-    
-    # Wilson score interval
-    ci_low, ci_high = stats.binomtest(
-        int(p * n), n, p
-    ).proportion_ci(confidence_level=0.95)
-    
-    # Plot error bars
-    ax2.errorbar(i, p, yerr=[[p-ci_low], [ci_high-p]], 
-                fmt='none', color='gray', alpha=0.5, capsize=3)
+ax = plot_event_rate(summary, tick_labels='auto', show_counts=True)
+plt.show()
 ```
 
-### Comparative Analysis
+### Rate-only view (no count bars)
+
 ```python
-fig, axes = plt.subplots(2, 1, figsize=(14, 10), sharex=True)
-
-# Training data
-plot_event_rate(train_summary, ax=axes[0])
-axes[0].set_title('Training Set')
-
-# Test data  
-plot_event_rate(test_summary, ax=axes[1])
-axes[1].set_title('Test Set')
-
-plt.tight_layout()
+ax = plot_event_rate(summary, show_counts=False, y_format='decimal')
 ```
 
-## Customization Examples
+### Custom styling
 
-### Business Presentation Style
 ```python
 fig, ax = plt.subplots(figsize=(14, 7))
 
 plot_event_rate(
     summary,
     ax=ax,
-    bar_color='#E8E8E8',
-    line_color='#D32F2F',
-    point_color='#B71C1C',
-    bar_alpha=0.8,
-    show_values=True,
-    show_grid=False
+    title="Default Rate by Income Bin",
+    bar_color='lightgray',
+    line_color='darkred',
+    show_counts=True,
+    show_rate_values=True,
+    y_format='percentage',
 )
+plt.tight_layout()
+plt.show()
+```
 
-# Clean styling
-ax.spines['top'].set_visible(False)
-ax.spines['right'].set_visible(False)
-ax.right_ax.spines['top'].set_visible(False)
+### Side-by-side WoE and event rate
 
-# Add title and labels
-ax.set_title('Customer Risk Profile by Segment', 
-            fontsize=16, fontweight='bold', pad=20)
-ax.set_xlabel('Customer Segment', fontsize=12)
-ax.set_ylabel('Number of Customers', fontsize=12)
-ax.right_ax.set_ylabel('Default Rate', fontsize=12)
+```python
+from MOBPY.plot import plot_woe_bars, plot_event_rate
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 6))
+
+plot_woe_bars(summary, ax=ax1, tick_labels='auto')
+plot_event_rate(summary, ax=ax2, tick_labels='auto', show_counts=True)
 
 plt.tight_layout()
+plt.show()
 ```
 
-### Academic Publication Style
+### Accessing the secondary axis
+
 ```python
-fig, ax = plt.subplots(figsize=(10, 6))
-
-plot_event_rate(
-    summary,
-    ax=ax,
-    bar_color='white',
-    line_color='black',
-    point_color='black',
-    bar_alpha=1.0,
-    line_width=1.5,
-    point_size=40,
-    show_values=False,
-    show_grid=True,
-    grid_alpha=0.2
-)
-
-# Add hatching to bars
-for patch in ax.patches:
-    patch.set_hatch('//')
-    patch.set_edgecolor('black')
-    patch.set_linewidth(0.5)
-
-# Format for publication
-ax.set_title('Figure 1: Event Rate Distribution', fontsize=12)
-ax.tick_params(labelsize=10)
-ax.right_ax.tick_params(labelsize=10)
-
-plt.tight_layout()
-```
-
-## Common Patterns and Interpretation
-
-### Ideal Pattern
-- Monotonic event rate (consistently increasing/decreasing)
-- Adequate sample size in each bin (>5% of total)
-- Smooth transitions between bins
-
-### Warning Signs
-- **U-shaped curve**: Non-monotonic relationship
-- **Sparse bins**: Very low sample count (<30 samples)
-- **Rate jumps**: Large discontinuities in event rate
-- **Edge effects**: Extreme rates in first/last bins
-
-## Performance Considerations
-- Dual-axis plotting may be slow for >50 bins
-- Consider aggregating bins for large datasets
-- Cache calculations for interactive updates
-
-## Troubleshooting
-
-### Issue: Overlapping Axes Labels
-```python
-# Solution: Adjust label positions
 ax = plot_event_rate(summary)
-ax.yaxis.set_label_coords(-0.1, 0.5)
-ax.right_ax.yaxis.set_label_coords(1.1, 0.5)
+ax2 = ax.right_ax   # secondary axis for event rate
+
+# Add an overall mean reference line
+overall_rate = summary['mean'].mean() * 100
+ax2.axhline(y=overall_rate, color='blue', linestyle='--', alpha=0.7,
+            label=f'Overall rate: {overall_rate:.1f}%')
+ax2.legend(loc='upper right')
 ```
 
-### Issue: Event Rate Not Visible
-```python
-# Solution: Adjust secondary axis range
-ax = plot_event_rate(summary)
-ax.right_ax.set_ylim(0, max(summary['mean']) * 1.1)
-```
+## Interpretation Guide
 
-### Issue: Legend Overlapping Data
-```python
-# Solution: Place legend outside
-ax = plot_event_rate(summary)
-ax.legend(loc='upper left', bbox_to_anchor=(0, 1))
-ax.right_ax.legend(loc='upper right', bbox_to_anchor=(1, 1))
-```
+### Ideal pattern
 
-## Integration with Other Visualizations
-```python
-from MOBPY.plot import plot_event_rate, plot_woe_bars
+- Event rate increases (or decreases) monotonically across bins.
+- Bins have comparable sample counts — no extremely small bins.
 
-fig = plt.figure(figsize=(14, 10))
-gs = fig.add_gridspec(2, 1, height_ratios=[1, 1], hspace=0.3)
+### Warning signs
 
-# Event rate on top
-ax1 = fig.add_subplot(gs[0])
-plot_event_rate(summary, ax=ax1)
-ax1.set_title('Event Rate Analysis')
-
-# WoE bars below
-ax2 = fig.add_subplot(gs[1])
-plot_woe_bars(summary, ax=ax2)
-ax2.set_title('Weight of Evidence')
-
-plt.tight_layout()
-```
+- **Non-monotonic line**: suggests the binning did not achieve the desired monotonicity.
+- **Very sparse bins**: sample counts near zero reduce the reliability of the event rate estimate.
+- **Extreme rates**: bins at 0% or 100% event rate indicate class-count constraint issues.
 
 ## See Also
-- [`plot_woe_bars`](./plot_woe_bars.md) - WoE visualization
-- [`plot_sample_distribution`](./plot_sample_distribution.md) - Detailed distribution analysis
-- [`plot_bin_statistics`](./plot_bin_statistics.md) - Comprehensive statistics
-- [`MonotonicBinner`](../binning/mob.md) - Main binning class
+
+- [`plot_woe_bars`](./plot_woe_bars.md) — WoE visualization with identical `tick_labels` support
+- [`plot_categorical_merge`](./plot_categorical_merge.md) — category merge visualization
+- [`plot_bin_statistics`](./plot_bin_statistics.md) — comprehensive multi-panel view
+- [`MonotonicBinner`](../../binning/mob.md) — main binning class

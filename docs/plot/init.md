@@ -33,16 +33,20 @@ plt.show()
 - `plot_pava_animation` - Animated visualization of PAVA iterations
 
 ### MOB Result Visualization (`mob_plot.py`)
-- `plot_woe_bars` - Weight of Evidence for binary targets
-- `plot_event_rate` - Event rate and sample distribution
+
+- `plot_woe_bars` - Weight of Evidence for binary targets (supports `tick_labels='auto'` for categorical)
+- `plot_event_rate` - Event rate and sample distribution (supports `tick_labels='auto'` for categorical)
 - `plot_bin_statistics` - Comprehensive multi-panel results
 - `plot_sample_distribution` - Distribution of samples across bins
 - `plot_bin_boundaries` - Bin cuts on feature distribution
 - `plot_binning_stability` - Compare train vs test binning
+- `plot_categorical_merge` - Category merge visualization (categorical path only)
 
 For detailed documentation of each function, see:
+
 - [PAVA Visualization Functions](./csd_gcm.md)
 - [MOB Result Plot Functions](./mob_plot/)
+- [plot_categorical_merge](./mob_plot/plot_categorical_merge.md)
 
 ## Common Parameters
 

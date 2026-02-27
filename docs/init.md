@@ -71,9 +71,11 @@ Advanced users can access internal modules directly. See individual module docum
 - [Plot module](./plot/) - Visualization tools
 
 ## Key Features
-- **Deterministic & Fast**: Stack-based PAVA with O(k) adjacent merges
-- **Robust Constraints**: Min/max samples, min positives, min negatives, min/max bins
-- **Safe Edges**: First bin starts at -∞, last bin ends at +∞
+
+- **Deterministic & Fast**: Stack-based PAVA with O(k) adjacent merges for numeric x; O(k²) chi-square merging for categorical x
+- **Two Binning Paths**: Numeric x (PAVA + Welch's t-test) and categorical x (chi-square + multiple comparison correction)
+- **Robust Constraints**: Min/max samples, min positives, min negatives, min/max bins — enforced on both paths
+- **Safe Edges**: First bin starts at -∞, last bin ends at +∞ (numeric); category sets with full coverage (categorical)
 - **Well-tested**: Comprehensive unit and property-based tests
 
 ## Dependencies

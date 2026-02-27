@@ -22,7 +22,8 @@ MOBPY/
 │       │   ├── __init__.py
 │       │   ├── constraints.py          # BinningConstraints class
 │       │   ├── pava.py                 # PAVA algorithm implementation
-│       │   ├── merge.py                # Block merging algorithms
+│       │   ├── merge.py                # Block merging algorithms (numeric)
+│       │   ├── categorical_merge.py    # Chi-square merging (categorical)
 │       │   └── utils.py                # Helper functions and utilities
 │       │
 │       └── plot/                       # Visualization tools
@@ -36,12 +37,18 @@ MOBPY/
 ```
 MonotonicBinner (binning.mob)
     ├── BinningConstraints (core.constraints)
-    ├── PAVA (core.pava)
-    │   └── calculate_correlation (core.utils)
-    ├── merge_adjacent (core.merge)
-    │   ├── Block
-    │   ├── MergeScorer
-    │   └── MergeStrategy
+    ├── [numeric path]
+    │   ├── PAVA (core.pava)
+    │   │   └── calculate_correlation (core.utils)
+    │   └── merge_adjacent (core.merge)
+    │       ├── Block / _BlockStatsBase
+    │       ├── MergeScorer
+    │       └── MergeStrategy
+    ├── [categorical path]
+    │   └── merge_categorical (core.categorical_merge)
+    │       ├── CategoryBlock (inherits _BlockStatsBase)
+    │       ├── ChiResult
+    │       └── _adjust_pvalues
     ├── partition_df (core.utils)
     ├── woe_iv (core.utils)
     └── Plotting Functions (plot.*)
@@ -107,7 +114,8 @@ woe_scores = binner.transform(new_df['Age'], assign='woe')
 ### Core Algorithms
 - [BinningConstraints](./core/constraints.md) - Constraint configuration
 - [PAVA Algorithm](./core/pava.md) - Monotone fitting
-- [Merge Module](./core/merge.md) - Block merging strategies
+- [Merge Module](./core/merge.md) - Block merging strategies (numeric)
+- [Categorical Merge Module](./core/categorical_merge.md) - Chi-square merging (categorical)
 - [Utilities](./core/utils.md) - Helper functions
 
 ### Visualization

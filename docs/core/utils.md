@@ -8,6 +8,35 @@ The utils module provides essential helper functions for data validation, partit
 
 ## Data Validation Functions
 
+### `ensure_categorical_series(s: pd.Series, name: str) -> pd.Series`
+
+Validates that a pandas Series contains non-numeric (categorical / string) data, as required by the categorical binning path.
+
+**Parameters:**
+
+- **s** (`pd.Series`): Series to validate
+- **name** (`str`): Column name for error messages
+
+**Returns:**
+
+- `pd.Series`: The same series (validated in place)
+
+**Raises:**
+
+- `DataError`: If the series has a numeric dtype (use `x_type='numeric'` instead)
+
+**Example:**
+
+```python
+from MOBPY.core.utils import ensure_categorical_series
+
+cat_series = pd.Series(['food', 'electronics', 'food'])
+ensure_categorical_series(cat_series, 'merchant_category')  # OK
+
+num_series = pd.Series([1.0, 2.0, 3.0])
+ensure_categorical_series(num_series, 'age')  # Raises DataError
+```
+
 ### `ensure_numeric_series(s: pd.Series, name: str) -> pd.Series`
 Validates that a pandas Series contains numeric data and converts if possible.
 
@@ -197,39 +226,47 @@ corr = calculate_correlation(df['age'], df['income'], method='spearman')
 corr = calculate_correlation(df['age'], df['income'], method='kendall')
 ```
 
-### `woe_iv(goods: Union[int, np.ndarray], bads: Union[int, np.ndarray], smoothing: float = 0.5) -> Tuple[np.ndarray, np.ndarray]`
+### `woe_iv(goods, bads, smoothing=0.5, return_components=False)`
+
 Calculates Weight of Evidence (WoE) and Information Value (IV) for binary classification.
 
 **Parameters:**
-- **goods** (`Union[int, np.ndarray]`): Count of good outcomes (y=0)
-- **bads** (`Union[int, np.ndarray]`): Count of bad outcomes (y=1)
-- **smoothing** (`float`): Smoothing factor to avoid division by zero
+
+- **goods** (`np.ndarray`): Count of good outcomes (y=0) per bin
+- **bads** (`np.ndarray`): Count of bad outcomes (y=1) per bin
+- **smoothing** (`float`): Smoothing constant added to goods and bads to avoid division by zero (default `0.5`)
+- **return_components** (`bool`): If `True`, return a dict with keys `"woe"` and `"iv"` instead of a tuple (default `False`)
 
 **Returns:**
-- `Tuple[np.ndarray, np.ndarray]`: (WoE values, IV contributions)
+
+- Tuple `(woe_array, iv_array)` when `return_components=False`
+- Dict `{"woe": woe_array, "iv": iv_array}` when `return_components=True`
+
+WoE and IV are calculated for **all** bins passed in, including Missing and Excluded rows (smoothing prevents undefined values).
 
 **Formulas:**
+
 ```
-WoE = ln((goods_i / total_goods) / (bads_i / total_bads))
-IV_i = (goods_i / total_goods - bads_i / total_bads) * WoE_i
+WoE_i = ln((goods_i / total_goods) / (bads_i / total_bads))
+IV_i  = (goods_i / total_goods - bads_i / total_bads) × WoE_i
 ```
 
 **Example:**
+
 ```python
 from MOBPY.core.utils import woe_iv
+import numpy as np
 
-# Single bin
-goods, bads = 100, 20
-woe, iv = woe_iv(goods, bads)
-
-# Multiple bins
+# Tuple return (default)
 goods = np.array([100, 150, 80, 120])
-bads = np.array([20, 40, 35, 25])
+bads  = np.array([20, 40, 35, 25])
 woe_values, iv_values = woe_iv(goods, bads)
-
-print(f"WoE: {woe_values}")
-print(f"IV contributions: {iv_values}")
 print(f"Total IV: {iv_values.sum():.4f}")
+
+# Dict return (used internally by MonotonicBinner)
+components = woe_iv(goods, bads, smoothing=0.5, return_components=True)
+print(components["woe"])
+print(components["iv"])
 ```
 
 ### `compute_gini(y_true: np.ndarray, y_score: np.ndarray) -> float`
