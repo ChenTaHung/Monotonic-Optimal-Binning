@@ -35,6 +35,7 @@ def plot_woe_bars(
     show_iv: bool = True,
     rotation: int = 45,
     bar_width: float = 0.8,
+    tick_labels: Optional[Union[List[str], str]] = None,
 ) -> Axes:
     """Plot Weight of Evidence (WoE) as bars for each bin.
     
@@ -54,18 +55,30 @@ def plot_woe_bars(
         show_iv: Whether to show IV values in subtitle.
         rotation: Rotation angle for x-axis labels.
         bar_width: Width of bars (0-1).
-        
+        tick_labels: X-axis tick labels.  Three options:
+
+            - ``None`` *(default)* — use the ``bucket`` column from
+              *summary_df* verbatim.  Fully backward-compatible for all
+              numeric binning use cases.
+            - A ``list[str]`` — use these strings directly (one per bin row).
+            - ``'auto'`` — use the ``bucket`` column verbatim when labels
+              are not categorical set strings; otherwise auto-generate compact
+              ``"Bin N\\n(XX.X%)"`` labels (0-based, matching the row index
+              of ``binner.bins_()``).  Detection is structural: labels that
+              start with ``'{'`` are treated as categorical set labels.
+
     Returns:
         Axes object with the plot.
-        
+
     Raises:
         DataError: If required columns are missing.
-        
+
     Examples:
         >>> binner = MonotonicBinner(df, x='age', y='default')
         >>> binner.fit()
         >>> summary = binner.summary_()
-        >>> ax = plot_woe_bars(summary)
+        >>> ax = plot_woe_bars(summary)                        # numeric — verbatim labels
+        >>> ax = plot_woe_bars(summary, tick_labels='auto')    # categorical — compact labels
         >>> plt.show()
     """
     # Create figure if needed
@@ -131,9 +144,23 @@ def plot_woe_bars(
     # Add horizontal line at y=0
     ax.axhline(y=0, color='black', linestyle='-', linewidth=1, alpha=0.5)
     
+    # ── resolve tick labels ───────────────────────────────────────────────
+    if isinstance(tick_labels, list):
+        x_labels = list(tick_labels)
+    elif tick_labels == "auto" and any(str(b).startswith('{') for b in buckets):
+        # Categorical set labels ({cat_a, cat_b, ...}) → compact "Bin N\n(XX.X%)"
+        # N is 0-based to match the row index of binner.bins_()
+        rates = plot_df['mean'].values if 'mean' in plot_df.columns else [None] * len(buckets)
+        x_labels = [
+            f"Bin {i}\n({r:.1%})" if r is not None else f"Bin {i}"
+            for i, r in enumerate(rates)
+        ]
+    else:
+        x_labels = list(buckets)
+
     # Styling
     ax.set_xticks(positions)
-    ax.set_xticklabels(buckets, rotation=rotation, ha='right' if rotation > 0 else 'center')
+    ax.set_xticklabels(x_labels, rotation=rotation, ha='right' if rotation > 0 else 'center')
     ax.set_xlabel('Bins', fontsize=11)
     ax.set_ylabel('Weight of Evidence (WoE)', fontsize=11)
     
@@ -172,6 +199,7 @@ def plot_event_rate(
     show_rate_values: bool = True,
     rotation: int = 45,
     y_format: str = "percentage",
+    tick_labels: Optional[Union[List[str], str]] = None,
 ) -> Axes:
     """Plot event rate (mean of y) by bin with sample sizes.
     
@@ -189,13 +217,25 @@ def plot_event_rate(
         show_rate_values: Whether to show rate values on the line.
         rotation: Rotation angle for x-axis labels.
         y_format: Format for y-axis ('percentage' or 'decimal').
-        
+        tick_labels: X-axis tick labels.  Three options:
+
+            - ``None`` *(default)* — use the ``bucket`` column from
+              *summary_df* verbatim.  Fully backward-compatible for all
+              numeric binning use cases.
+            - A ``list[str]`` — use these strings directly (one per bin row).
+            - ``'auto'`` — use the ``bucket`` column verbatim when labels
+              are not categorical set strings; otherwise auto-generate compact
+              ``"Bin N\\n(XX.X%)"`` labels (0-based, matching the row index
+              of ``binner.bins_()``).  Detection is structural: labels that
+              start with ``'{'`` are treated as categorical set labels.
+
     Returns:
         Axes object with the plot.
-        
+
     Examples:
         >>> summary = binner.summary_()
-        >>> ax = plot_event_rate(summary, show_counts=True)
+        >>> ax = plot_event_rate(summary, show_counts=True)                     # numeric
+        >>> ax = plot_event_rate(summary, tick_labels='auto', show_counts=True) # categorical
         >>> plt.show()
     """
     # Create figure if needed
@@ -281,11 +321,21 @@ def plot_event_rate(
                 color=line_color
             )
     
+    # ── resolve tick labels ───────────────────────────────────────────────
+    if isinstance(tick_labels, list):
+        x_labels = list(tick_labels)
+    elif tick_labels == "auto" and any(str(b).startswith('{') for b in buckets):
+        # Categorical set labels → compact "Bin N\n(XX.X%)", 0-based index
+        rates = summary_df['mean'].values
+        x_labels = [f"Bin {i}\n({r:.1%})" for i, r in enumerate(rates)]
+    else:
+        x_labels = list(buckets)
+
     # Styling
     ax.set_xticks(positions)
-    ax.set_xticklabels(buckets, rotation=rotation, ha='right' if rotation > 0 else 'center')
+    ax.set_xticklabels(x_labels, rotation=rotation, ha='right' if rotation > 0 else 'center')
     ax.set_xlabel('Bins', fontsize=11)
-    
+
     if show_counts:
         ax.set_ylabel('Sample Count', fontsize=11, color='black')
         ax.tick_params(axis='y', labelcolor='black')
@@ -818,5 +868,211 @@ def plot_binning_stability(
         title = f'Binning Stability Analysis: {binner.x}'
     fig.suptitle(title, fontsize=14, fontweight='bold')
     fig.tight_layout()
-    
+
     return fig
+
+
+def plot_categorical_merge(
+    binner,
+    *,
+    ax: Optional[Axes] = None,
+    figsize: Tuple[float, float] = (12, 5),
+    title: Optional[str] = None,
+    show_counts: bool = True,
+) -> Axes:
+    """Visualize how original categories were merged into final bins.
+
+    Analogous to the PAVA process plot for numeric binning.  Categories are
+    grouped by their final bin assignment (sorted by the bin's pooled event
+    rate), with a visible gap between groups.  Within each group, bars are
+    sorted by ascending individual event rate.  A horizontal dashed line spans
+    each group at its pooled rate, and a dotted line marks the overall mean.
+
+    Args:
+        binner: A fitted ``MonotonicBinner`` with ``x_type='categorical'``.
+        ax: Axes to draw on.  If ``None`` a new figure is created.
+        figsize: Figure size used when ``ax`` is ``None``.
+        title: Chart title.  Defaults to
+            ``'Category Merge: N cats → K bins'``.
+        show_counts: If ``True`` annotates each bar with its sample count.
+
+    Returns:
+        The matplotlib ``Axes`` containing the chart.
+
+    Raises:
+        NotFittedError: If the binner has not been fitted.
+        ValueError: If the binner was not fitted on a categorical x.
+
+    Example:
+        >>> from MOBPY.plot import plot_categorical_merge
+        >>> binner = MonotonicBinner(df, x='state', y='has_any',
+        ...                         x_type='categorical')
+        >>> binner.fit()
+        >>> ax = plot_categorical_merge(binner)
+        >>> plt.show()
+    """
+    if not binner._is_fitted:
+        raise NotFittedError(
+            "Binner must be fitted before plotting.  Call binner.fit() first."
+        )
+    if binner._resolved_x_type != "categorical":
+        raise ValueError(
+            "plot_categorical_merge requires a binner fitted with "
+            "x_type='categorical'."
+        )
+
+    # ── per-category statistics from the clean partition ────────────────────
+    clean = binner._parts.clean
+    x_col, y_col = binner.x, binner.y
+
+    cat_stats = (
+        clean.groupby(x_col)[y_col]
+        .agg(n="count", n_events="sum")
+        .assign(event_rate=lambda d: d["n_events"] / d["n"])
+    )
+
+    overall_mean = clean[y_col].mean()
+    n_bins = len(binner._cat_merged_blocks)
+
+    # ── bin assignment: category → bin index ────────────────────────────────
+    bin_of: Dict[Any, int] = {}
+    bin_event_rate: Dict[int, float] = {}
+
+    for idx, block in enumerate(binner._cat_merged_blocks):
+        for cat in block.categories:
+            bin_of[cat] = idx
+        bin_event_rate[idx] = block.mean
+
+    # ── order bins by pooled event rate (ascending) ──────────────────────────
+    ordered_bins = sorted(range(n_bins), key=lambda i: bin_event_rate[i])
+    bin_display_rank: Dict[int, int] = {
+        bin_idx: rank for rank, bin_idx in enumerate(ordered_bins)
+    }
+
+    # ── colour palette (one colour per bin, in display order) ───────────────
+    palette = plt.cm.get_cmap("tab10", max(n_bins, 1))
+    # colour keyed by *display rank* so rank-0 (lowest rate) is colour-0
+    rank_color: Dict[int, Any] = {rank: palette(rank) for rank in range(n_bins)}
+    bin_color: Dict[int, Any] = {
+        bin_idx: rank_color[bin_display_rank[bin_idx]] for bin_idx in range(n_bins)
+    }
+
+    # ── sort categories: by display-rank of bin, then event rate within bin ──
+    cat_stats["_rank"] = [bin_display_rank[bin_of[c]] for c in cat_stats.index]
+    cat_stats = cat_stats.sort_values(["_rank", "event_rate"])
+    categories = cat_stats.index.tolist()
+    event_rates = cat_stats["event_rate"].tolist()
+    counts = cat_stats["n"].tolist()
+
+    # ── build x positions with a gap between groups ──────────────────────────
+    GAP = 0.8           # gap between groups in bar-width units
+    x_positions: List[float] = []
+    group_x_lo: Dict[int, float] = {}   # bin_idx → leftmost bar centre
+    group_x_hi: Dict[int, float] = {}   # bin_idx → rightmost bar centre
+    group_mid: Dict[int, float] = {}    # bin_idx → midpoint for label
+
+    cursor = 0.0
+    for rank in range(n_bins):
+        bin_idx = ordered_bins[rank]
+        group_cats = [c for c in categories if bin_of[c] == bin_idx]
+        if not group_cats:
+            continue
+        lo = cursor
+        for _ in group_cats:
+            x_positions.append(cursor)
+            cursor += 1.0
+        hi = cursor - 1.0
+        group_x_lo[bin_idx] = lo
+        group_x_hi[bin_idx] = hi
+        group_mid[bin_idx] = (lo + hi) / 2.0
+        cursor += GAP
+
+    bar_colors = [bin_color[bin_of[c]] for c in categories]
+
+    # ── axes setup ───────────────────────────────────────────────────────────
+    if ax is None:
+        _, ax = plt.subplots(figsize=figsize)
+
+    # ── light background shading per group ───────────────────────────────────
+    for bin_idx in group_x_lo:
+        lo = group_x_lo[bin_idx] - 0.5
+        width = group_x_hi[bin_idx] - group_x_lo[bin_idx] + 1.0
+        ax.axvspan(lo, lo + width, alpha=0.06,
+                   color=bin_color[bin_idx], zorder=0)
+
+    # ── bars ─────────────────────────────────────────────────────────────────
+    bars = ax.bar(
+        x_positions, event_rates, color=bar_colors,
+        alpha=0.82, edgecolor="white", linewidth=0.6, zorder=2,
+    )
+
+    # ── per-bin pooled-rate line (spans only its group) ──────────────────────
+    for bin_idx in group_x_lo:
+        ax.hlines(
+            bin_event_rate[bin_idx],
+            group_x_lo[bin_idx] - 0.45,
+            group_x_hi[bin_idx] + 0.45,
+            colors=bin_color[bin_idx], linewidths=2.0,
+            linestyles="--", alpha=0.95, zorder=3,
+        )
+
+    # ── overall mean line ────────────────────────────────────────────────────
+    overall_line = ax.axhline(
+        overall_mean, color="black", linestyle=":",
+        linewidth=1.5, label=f"Overall mean ({overall_mean:.1%})", zorder=3,
+    )
+
+    # ── group header labels (above the bars) ─────────────────────────────────
+    # bin_idx is 0-based and matches the row index of binner.bins_()
+    y_ceil = min(1.0, max(event_rates) if event_rates else 1.0)
+    header_y = y_ceil * 1.07
+    for bin_idx, mid in group_mid.items():
+        n_in_bin = sum(1 for c in categories if bin_of[c] == bin_idx)
+        ax.text(
+            mid, header_y,
+            f"Bin {bin_idx}  ({bin_event_rate[bin_idx]:.1%})\nn={n_in_bin}",
+            ha="center", va="bottom", fontsize=8,
+            color=bin_color[bin_idx], fontweight="bold",
+        )
+
+    # ── sample-count annotations on each bar ─────────────────────────────────
+    if show_counts:
+        for bar, cnt in zip(bars, counts):
+            bar_top = bar.get_height()
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar_top + y_ceil * 0.012,
+                f"n={cnt}", ha="center", va="bottom", fontsize=6.5,
+            )
+
+    # ── x-axis labels ────────────────────────────────────────────────────────
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(categories, rotation=45, ha="right", fontsize=8)
+    ax.set_ylabel("Event Rate")
+    ax.set_xlim(-0.6, max(x_positions) + 0.6 if x_positions else 1)
+    ax.set_ylim(0, min(1.0, y_ceil) * 1.22)   # headroom for group headers
+
+    # ── legend — ordered by event rate, labelled by bins_() row index ────────
+    bin_patches = [
+        mpatches.Patch(
+            color=bin_color[ordered_bins[rank]],
+            label=f"Bin {ordered_bins[rank]}  ({bin_event_rate[ordered_bins[rank]]:.1%})",
+        )
+        for rank in range(n_bins)
+    ]
+    ax.legend(
+        handles=bin_patches + [overall_line],
+        loc="upper left", fontsize=9, framealpha=0.9,
+    )
+
+    # ── title ────────────────────────────────────────────────────────────────
+    if title is None:
+        n_cats = binner.get_diagnostics()["n_initial_categories"]
+        n_final = binner.get_diagnostics()["n_final_bins"]
+        title = (
+            f"Category Merge: {n_cats} categories → {n_final} bins"
+            f"  [{binner.x}]"
+        )
+    ax.set_title(title, fontsize=11)
+
+    return ax
