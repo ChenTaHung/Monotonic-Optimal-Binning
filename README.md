@@ -3,7 +3,7 @@
 <h2><p align="center">MOBPY - Monotonic Optimal Binning for Python</p></h2>
 
 [![Run Tests](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/actions/workflows/RunTests.yml/badge.svg?branch=main)](https://github.com/ChenTaHung/Monotonic-Optimal-Binning/actions/workflows/RunTests.yml)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI version](https://badge.fury.io/py/MOBPY.svg?refresh=1)](https://pypi.org/project/MOBPY/)
 
