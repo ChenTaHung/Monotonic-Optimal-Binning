@@ -33,16 +33,20 @@ plt.show()
 - `plot_pava_animation` - Animated visualization of PAVA iterations
 
 ### MOB Result Visualization (`mob_plot.py`)
-- `plot_woe_bars` - Weight of Evidence for binary targets
-- `plot_event_rate` - Event rate and sample distribution
+
+- `plot_woe_bars` - Weight of Evidence for binary targets (supports `tick_labels='auto'` for categorical)
+- `plot_event_rate` - Event rate and sample distribution (supports `tick_labels='auto'` for categorical)
 - `plot_bin_statistics` - Comprehensive multi-panel results
 - `plot_sample_distribution` - Distribution of samples across bins
 - `plot_bin_boundaries` - Bin cuts on feature distribution
 - `plot_binning_stability` - Compare train vs test binning
+- `plot_categorical_merge` - Category merge visualization (categorical path only)
 
 For detailed documentation of each function, see:
+
 - [PAVA Visualization Functions](./csd_gcm.md)
 - [MOB Result Plot Functions](./mob_plot/)
+- [plot_categorical_merge](./mob_plot/plot_categorical_merge.md)
 
 ## Common Parameters
 
@@ -64,8 +68,8 @@ from MOBPY.plot import plot_woe_bars
 fig, ax = plt.subplots(figsize=(12, 6))
 ax.set_facecolor('#f0f0f0')
 
-plot_woe_bars(binner.summary_(), ax=ax, 
-              bar_color='#2E86AB', line_color='#A23B72')
+plot_woe_bars(binner.summary_(), ax=ax,
+              bar_color='#2E86AB', positive_color='#388E3C', negative_color='#A23B72')
 
 ax.set_title('Custom WoE Visualization', fontsize=16)
 ax.grid(True, alpha=0.3)

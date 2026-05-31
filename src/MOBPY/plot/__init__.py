@@ -18,6 +18,9 @@ Main Components:
         plot_sample_distribution: Distribution of samples across bins.
         plot_bin_boundaries: Bin cuts overlaid on feature distribution.
         plot_binning_stability: Compare binning on train vs test data.
+        plot_categorical_merge: Category merge process — bars per original
+            category coloured by final bin assignment (categorical analog of
+            the PAVA process plot).
 
 Example:
     >>> from MOBPY import MonotonicBinner
@@ -56,6 +59,7 @@ from .mob_plot import (
     plot_sample_distribution,
     plot_bin_boundaries,
     plot_binning_stability,
+    plot_categorical_merge,
 )
 
 __all__ = [
@@ -72,5 +76,8 @@ __all__ = [
     "plot_bin_statistics",
     "plot_sample_distribution",
     "plot_bin_boundaries",
-    "plot_binning_stability"
+    "plot_binning_stability",
+
+    # Categorical merge visualization
+    "plot_categorical_merge",
 ]

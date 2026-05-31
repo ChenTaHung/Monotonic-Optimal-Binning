@@ -68,6 +68,50 @@ def ensure_numeric_series(s: pd.Series, name: str) -> None:
         )
 
 
+def ensure_categorical_series(s: pd.Series, name: str) -> None:
+    """Validate that a pandas Series is suitable for categorical binning.
+
+    Checks that the series is not a plain numeric dtype. Object, string,
+    and categorical dtypes are accepted. Boolean is also accepted (two
+    categories: True/False).
+
+    Args:
+        s: Series to validate (non-null values only need to be checked).
+        name: Human-readable column name for error messages.
+
+    Raises:
+        DataError: If the series is integer or float dtype, which indicates
+            the user should use x_type='numeric' instead.
+
+    Examples:
+        >>> s = pd.Series(['A', 'B', 'A', 'C'])
+        >>> ensure_categorical_series(s, "segment")  # OK
+
+        >>> s = pd.Series([1.0, 2.0, 3.0])
+        >>> ensure_categorical_series(s, "score")  # Raises DataError
+    """
+    if pd.api.types.is_float_dtype(s) or pd.api.types.is_integer_dtype(s):
+        raise DataError(
+            f"Column '{name}' is numeric (dtype={s.dtype}). "
+            f"Categorical binning requires a non-numeric column (object, string, or "
+            f"category dtype). Use x_type='numeric' for numeric features."
+        )
+
+    non_null = s.dropna()
+    if non_null.empty:
+        logger.warning(f"Column '{name}' contains only null values")
+        return
+
+    n_unique = non_null.nunique()
+    if n_unique > 100:
+        warnings.warn(
+            f"Column '{name}' has {n_unique} unique categories. "
+            f"Categorical binning may be slow with many categories. "
+            f"Consider reducing cardinality before binning.",
+            UserWarning,
+        )
+
+
 def is_binary_series(s: pd.Series, strict: bool = False) -> bool:
     """Check if a Series represents binary data (0/1 values).
     

@@ -762,3 +762,316 @@ class TestMonotonicBinnerIntegration:
             # Both should be non-zero due to constraints
             assert positives > 0, f"Bin {row['bucket']} has 0 positives"
             assert negatives > 0, f"Bin {row['bucket']} has 0 negatives"
+
+
+# ---------------------------------------------------------------------------
+# Categorical binning integration tests
+# ---------------------------------------------------------------------------
+
+class TestMonotonicBinnerCategorical:
+    """Integration tests for the categorical x binning path."""
+
+    def create_categorical_data(self, n: int = 500, seed: int = 42) -> pd.DataFrame:
+        """Create a dataset with a categorical x and a binary y.
+
+        Five categories (A–E) have progressively higher event rates.
+        """
+        np.random.seed(seed)
+        categories = ["A", "B", "C", "D", "E"]
+        event_rates = {"A": 0.10, "B": 0.25, "C": 0.50, "D": 0.75, "E": 0.90}
+        x = np.random.choice(categories, size=n)
+        y = np.array([np.random.binomial(1, event_rates[c]) for c in x])
+        return pd.DataFrame({"x": x, "y": y})
+
+    def create_many_category_data(self, n_cats: int = 20, n: int = 2000,
+                                  seed: int = 0) -> pd.DataFrame:
+        np.random.seed(seed)
+        categories = [f"cat_{i}" for i in range(n_cats)]
+        rates = np.linspace(0.05, 0.95, n_cats)
+        rate_map = dict(zip(categories, rates))
+        x = np.random.choice(categories, size=n)
+        y = np.array([np.random.binomial(1, rate_map[c]) for c in x])
+        return pd.DataFrame({"x": x, "y": y})
+
+    # ---- Auto-detection ----
+
+    def test_x_type_auto_detects_numeric(self):
+        """Auto mode selects numeric path for float columns."""
+        np.random.seed(0)
+        df = pd.DataFrame({"x": np.random.randn(200), "y": np.random.randint(0, 2, 200)})
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="auto")
+        binner.fit()
+        assert binner._resolved_x_type == "numeric"
+
+    def test_x_type_auto_detects_categorical(self):
+        """Auto mode selects categorical path for string columns."""
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="auto")
+        binner.fit()
+        assert binner._resolved_x_type == "categorical"
+
+    def test_x_type_explicit_categorical(self):
+        """x_type='categorical' forces the categorical path."""
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        binner.fit()
+        assert binner._resolved_x_type == "categorical"
+
+    # ---- Basic fit ----
+
+    def test_basic_categorical_fit(self):
+        """Categorical fit completes and produces valid bins."""
+        df = self.create_categorical_data()
+        constraints = BinningConstraints(max_bins=4, min_bins=2)
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical",
+                                 constraints=constraints)
+        binner.fit()
+        assert binner._is_fitted
+        assert binner._is_binary_y
+
+    def test_non_binary_y_raises_for_categorical(self):
+        """Categorical path requires binary y."""
+        np.random.seed(0)
+        df = pd.DataFrame({
+            "x": ["A", "B", "C"] * 100,
+            "y": np.random.randn(300),  # continuous y
+        })
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        from MOBPY.exceptions import DataError
+        with pytest.raises(DataError, match="binary"):
+            binner.fit()
+
+    def test_numeric_x_with_categorical_explicit_raises(self):
+        """x_type='categorical' on a float column raises DataError."""
+        np.random.seed(0)
+        df = pd.DataFrame({
+            "x": np.random.randn(200),
+            "y": np.random.randint(0, 2, 200),
+        })
+        from MOBPY.exceptions import DataError
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        with pytest.raises(DataError, match="numeric"):
+            binner.fit()
+
+    # ---- bins_() ----
+
+    def test_bins_returns_categories_column(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical",
+                                 constraints=BinningConstraints(max_bins=4, min_bins=2))
+        binner.fit()
+        bins = binner.bins_()
+        assert "categories" in bins.columns
+        assert "left" not in bins.columns
+        assert "right" not in bins.columns
+        # Every bin must have at least one category
+        assert all(len(cats) >= 1 for cats in bins["categories"])
+
+    def test_bins_all_categories_covered(self):
+        """Every original category must appear in exactly one output bin."""
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        binner.fit()
+        bins = binner.bins_()
+        all_cats: list = []
+        for row in bins["categories"]:
+            all_cats.extend(row)
+        assert sorted(all_cats) == sorted(df["x"].unique())
+
+    def test_bins_max_bins_respected(self):
+        df = self.create_many_category_data()
+        for max_b in (3, 5, 8):
+            constraints = BinningConstraints(max_bins=max_b, min_bins=2)
+            binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical",
+                                     constraints=constraints)
+            binner.fit()
+            bins = binner.bins_()
+            assert len(bins) <= max_b
+
+    # ---- summary_() ----
+
+    def test_summary_has_correct_columns_binary(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        binner.fit()
+        summary = binner.summary_()
+        for col in ("bucket", "count", "count_pct", "sum", "mean", "std",
+                    "min", "max", "woe", "iv"):
+            assert col in summary.columns
+
+    def test_summary_iv_is_positive(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        binner.fit()
+        total_iv = binner.summary_()["iv"].sum()
+        assert total_iv > 0
+
+    def test_summary_count_pct_sums_to_100(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        binner.fit()
+        total_pct = binner.summary_()["count_pct"].sum()
+        assert total_pct == pytest.approx(100.0, abs=0.01)
+
+    def test_summary_includes_missing_row(self):
+        df = self.create_categorical_data()
+        # Insert some NaN
+        df.loc[df.sample(20, random_state=1).index, "x"] = None
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        binner.fit()
+        summary = binner.summary_()
+        assert "Missing" in summary["bucket"].values
+
+    def test_summary_includes_excluded_row(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical",
+                                 exclude_values=["A"])
+        binner.fit()
+        summary = binner.summary_()
+        assert "Excluded:A" in summary["bucket"].values
+
+    # ---- transform() ----
+
+    def test_transform_interval_returns_labels(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        binner.fit()
+        result = binner.transform(df["x"])
+        assert result.notna().all()
+        # All labels should start with '{'
+        assert all(str(v).startswith("{") for v in result)
+
+    def test_transform_woe_returns_floats(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        binner.fit()
+        result = binner.transform(df["x"], assign="woe")
+        assert result.notna().all()
+        assert result.apply(lambda v: isinstance(v, float)).all()
+
+    def test_transform_missing_values(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        binner.fit()
+        x_with_nan = df["x"].copy()
+        x_with_nan.iloc[:5] = None
+        result = binner.transform(x_with_nan)
+        assert (result.iloc[:5] == "Missing").all()
+
+    def test_transform_excluded_values(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical",
+                                 exclude_values=["E"])
+        binner.fit()
+        result = binner.transform(df["x"])
+        e_mask = df["x"] == "E"
+        assert (result[e_mask] == "Excluded:E").all()
+
+    def test_transform_unseen_category_unknown(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical",
+                                 unseen_categories="unknown")
+        binner.fit()
+        x_new = pd.Series(["A", "B", "UNSEEN_CAT", "C"])
+        result = binner.transform(x_new)
+        assert result.iloc[2] == "Unknown"
+
+    def test_transform_unseen_category_error(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical",
+                                 unseen_categories="error")
+        binner.fit()
+        x_new = pd.Series(["A", "UNSEEN_CAT"])
+        with pytest.raises(ValueError, match="Unseen"):
+            binner.transform(x_new)
+
+    def test_transform_left_right_raises_for_categorical(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        binner.fit()
+        with pytest.raises(ValueError, match="categorical"):
+            binner.transform(df["x"], assign="left")
+        with pytest.raises(ValueError, match="categorical"):
+            binner.transform(df["x"], assign="right")
+
+    def test_transform_index_preserved(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        binner.fit()
+        result = binner.transform(df["x"])
+        assert result.index.equals(df.index)
+
+    # ---- pava_blocks_ / pava_groups_ raise for categorical ----
+
+    def test_pava_blocks_raises_for_categorical(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        binner.fit()
+        with pytest.raises(NotFittedError, match="categorical"):
+            binner.pava_blocks_()
+
+    def test_pava_groups_raises_for_categorical(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        binner.fit()
+        with pytest.raises(NotFittedError, match="categorical"):
+            binner.pava_groups_()
+
+    # ---- diagnostics ----
+
+    def test_get_diagnostics_x_type(self):
+        df = self.create_categorical_data()
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical")
+        binner.fit()
+        diag = binner.get_diagnostics()
+        assert diag["x_type"] == "categorical"
+        assert "n_initial_categories" in diag
+        assert "n_final_bins" in diag
+
+    def test_numeric_diagnostics_x_type(self):
+        """Existing numeric path should report x_type='numeric' in diagnostics."""
+        np.random.seed(0)
+        df = pd.DataFrame({"x": np.random.randn(300), "y": np.random.randint(0, 2, 300)})
+        binner = MonotonicBinner(df=df, x="x", y="y", x_type="numeric")
+        binner.fit()
+        diag = binner.get_diagnostics()
+        assert diag["x_type"] == "numeric"
+
+    # ---- correction / alpha parameters ----
+
+    def test_categorical_alpha_parameter(self):
+        """Merging condition is adj_p >= alpha.
+
+        Low alpha (e.g. 1e-10): almost any pair qualifies → aggressive merging → fewer bins.
+        High alpha (e.g. 0.99): only near-identical pairs qualify → conservative → more bins.
+        """
+        df = self.create_many_category_data()
+        constraints = BinningConstraints(max_bins=20, min_bins=1)
+
+        # Permissive: merge aggressively (adj_p >= tiny threshold)
+        binner_permissive = MonotonicBinner(df=df, x="x", y="y",
+                                            x_type="categorical",
+                                            constraints=constraints,
+                                            categorical_alpha=1e-10)
+        binner_permissive.fit()
+        bins_permissive = binner_permissive.bins_()
+
+        # Conservative: only merge near-identical pairs (adj_p >= 0.99)
+        binner_conservative = MonotonicBinner(df=df, x="x", y="y",
+                                              x_type="categorical",
+                                              constraints=constraints,
+                                              categorical_alpha=0.99)
+        binner_conservative.fit()
+        bins_conservative = binner_conservative.bins_()
+
+        # Permissive alpha merges more → fewer or equal bins
+        assert len(bins_permissive) <= len(bins_conservative)
+
+    def test_categorical_correction_parameter_accepted(self):
+        """Accepted correction strings should not raise."""
+        df = self.create_categorical_data()
+        for correction in ("bonferroni", "holm", "fdr_bh"):
+            binner = MonotonicBinner(df=df, x="x", y="y", x_type="categorical",
+                                     categorical_correction=correction)
+            binner.fit()  # should not raise
+            assert binner._is_fitted

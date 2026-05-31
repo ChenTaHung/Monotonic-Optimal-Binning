@@ -2,6 +2,39 @@
 
 All notable changes to MOBPY will be documented in this file.
 
+## [2.3.0] - 2026-02-27
+
+### Added
+
+- **Categorical binning path** (`x_type='categorical'`): chi-square-based block merging with multiple comparison correction (Holm by default), O(k²) pair-result caching, three-phase merging (statistical → min_samples → class-count), and full `BinningConstraints` enforcement
+- **`MonotonicBinner` parameters for categorical path**:
+  - `x_type` — `'numeric'` (default) or `'categorical'`
+  - `categorical_alpha` — significance level for chi-square merging (default `0.05`)
+  - `categorical_correction` — `'holm'` (default), `'bonferroni'`, or `'fdr_bh'`
+  - `unseen_categories` — `'error'` (default) raises `ValueError` on unseen values; `'unknown'` returns `"Unknown"` / NaN WoE
+  - `max_label_cats` — truncate long bin labels: `{A, B, C, ...+N}`
+- **`bin_assignment()` method** on `MonotonicBinner` — returns a Series mapping each original category to its 0-based bin index
+- **`plot_categorical_merge()`** visualization — one bar per original category coloured by final bin assignment, grouped with gaps, per-bin dashed pooled-rate hlines, overall mean dotted line
+- **`tick_labels` parameter** on `plot_woe_bars` and `plot_event_rate` — `None` (verbatim), `list[str]` (explicit), or `'auto'` (compact `"Bin N\n(XX.X%)"` labels for categorical set labels)
+- **`ensure_categorical_series()`** validation utility — rejects numeric dtype for the categorical path
+- **`woe_iv()` `return_components` parameter** — returns `{"woe": arr, "iv": arr}` dict when `True`
+- **`CategoryBlock`** and **`merge_categorical()`** in new `MOBPY.core.categorical_merge` module, also re-exported from `MOBPY.core`
+- **E-Commerce Fraud categorical binning example** notebook (`examples/E-Commerce Fraud - Categorical Binning.ipynb`)
+
+### Changed
+
+- **Dropped Python 3.9–3.12 support** — minimum Python version is now **3.13**
+- **NumPy minimum version bumped to 2.0.0** — NumPy 1.x has no Python 3.13+ wheels
+- **CI matrix** now runs on Python 3.13 and 3.14 in parallel
+- `get_diagnostics()` returns `n_initial_categories` and `n_final_bins` for the categorical path (in addition to existing numeric-path keys)
+- `bins_()` returns a `categories` column (sorted list of original values) instead of `left`/`right` edges for the categorical path
+
+### Fixed
+
+- **`MatplotlibDeprecationWarning`** — replaced `plt.cm.get_cmap()` (deprecated in 3.7, removed in 3.11) with `matplotlib.colormaps[name].resampled(N)` in `plot_categorical_merge`
+
+---
+
 ## [2.2.0] - 2025-02-18
 
 ### Added
