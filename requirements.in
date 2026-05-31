@@ -1,8 +1,0 @@
-# Core dependencies for MOBPY
-# This file is used with pip-compile to generate requirements.txt
-# Run: pip-compile requirements.in
-
-numpy
-pandas
-scipy
-matplotlib
